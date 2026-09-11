@@ -1,0 +1,83 @@
+{
+	"name": "@send-fun/sdk",
+	"version": "1.0.0",
+	"description": "Kit-native TypeScript SDK for send.fun",
+	"keywords": [
+		"dex",
+		"launchpad",
+		"sdk",
+		"send",
+		"solana"
+	],
+	"homepage": "https://send.fun",
+	"bugs": {
+		"url": "https://github.com/send-fun/sendfun-sdk-typescript/issues"
+	},
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/send-fun/sendfun-sdk-typescript.git"
+	},
+	"files": [
+		"dist",
+		"src"
+	],
+	"type": "module",
+	"sideEffects": false,
+	"main": "./src/index.ts",
+	"module": "./src/index.ts",
+	"exports": {
+		".": {
+			"types": "./src/index.ts",
+			"import": "./src/index.ts",
+			"require": "./dist/index.cjs"
+		}
+	},
+	"publishConfig": {
+		"main": "./dist/index.cjs",
+		"module": "./dist/index.mjs",
+		"types": "./dist/index.d.cts",
+		"exports": {
+			".": {
+				"import": {
+					"types": "./dist/index.d.mts",
+					"default": "./dist/index.mjs"
+				},
+				"require": {
+					"types": "./dist/index.d.cts",
+					"default": "./dist/index.cjs"
+				}
+			}
+		},
+		"access": "public"
+	},
+	"scripts": {
+		"build": "pnpm run clean && tsdown",
+		"clean": "rm -rf dist",
+		"dev": "tsdown --watch",
+		"format": "oxfmt --write",
+		"format:check": "oxfmt --check",
+		"prepublishOnly": "pnpm run build",
+		"test": "tsx --test 'tests/**/*.test.ts'",
+		"typecheck": "tsgo"
+	},
+	"dependencies": {},
+	"devDependencies": {
+		"@solana/kit": "^6.10.0",
+		"@solana/program-client-core": "^6.10.0",
+		"@types/node": "^24.10.4",
+		"@typescript/native-preview": "7.0.0-dev.20260512.1",
+		"oxfmt": "^0.49.0",
+		"tsdown": "^0.23.0",
+		"tsx": "^4.21.0",
+		"typescript": "^6.0.3"
+	},
+	"peerDependencies": {
+		"@solana/kit": ">=6.10.0",
+		"@solana/program-client-core": ">=6.10.0"
+	},
+	"engines": {
+		"node": ">=20.18.0"
+	},
+	"packageManager": "pnpm@11.5.0"
+}
