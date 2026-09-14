@@ -2,6 +2,11 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { address, getBase64Encoder } from '@solana/kit';
 import {
+	getMintDecoder,
+	type Extension,
+	type TransferFee,
+} from '@solana-program/token-2022';
+import {
 	SYSTEM_PROGRAM_ADDRESS,
 	TOKEN_2022_PROGRAM_ADDRESS,
 	TOKEN_PROGRAM_ADDRESS,
@@ -12,6 +17,7 @@ import {
 	mintFeeAtEpoch,
 	transferFeeAtEpoch,
 	type TransferFeeConfig,
+	type TransferFeeEntry,
 } from '../src/transfer-fee.js';
 
 const U64_MAX = 18_446_744_073_709_551_615n;
@@ -119,6 +125,20 @@ describe('decodeTransferFeeConfig', () => {
 			),
 			undefined,
 		);
+	});
+
+	it('stops at a zero tail too short for a header, as SPL reads it', () => {
+		// Extensions totalling `Multisig::LEN` are allocated two bytes past it.
+		for (const tail of [1, 2, 3]) {
+			assert.equal(
+				decodeTransferFeeConfig(
+					token2022MintBytes([18, 0, 64, 0, ...zeros(64 + tail)]),
+					TOKEN_2022_PROGRAM_ADDRESS,
+				),
+				undefined,
+				`tail of ${tail}`,
+			);
+		}
 	});
 
 	it('rejects an owner that is neither token program', () => {
@@ -251,6 +271,99 @@ describe('decodeTransferFeeConfig', () => {
 				newer: { epoch: 0n, maximumFee: 0n, basisPoints: 0 },
 			} satisfies TransferFeeConfig,
 		);
+	});
+});
+
+// Kit's decoder as a test-only oracle: the SDK takes no runtime dependency on it.
+const UNSET_AUTHORITY = address('11111111111111111111111111111111');
+
+const METADATA_POINTER = [18, 0, 64, 0, ...zeros(64)];
+
+function isTransferFeeConfig(
+	extension: Extension,
+): extension is Extract<Extension, { __kind: 'TransferFeeConfig' }> {
+	return extension.__kind === 'TransferFeeConfig';
+}
+
+function kitEntry(fee: TransferFee): TransferFeeEntry {
+	return {
+		epoch: fee.epoch,
+		maximumFee: fee.maximumFee,
+		basisPoints: fee.transferFeeBasisPoints,
+	};
+}
+
+function kitConfig(data: Uint8Array): TransferFeeConfig | undefined {
+	const { extensions } = getMintDecoder().decode(data);
+	if (extensions.__option === 'None') return undefined;
+	const config = extensions.value.find(isTransferFeeConfig);
+	if (config === undefined) return undefined;
+	return {
+		authority:
+			config.transferFeeConfigAuthority === UNSET_AUTHORITY
+				? undefined
+				: config.transferFeeConfigAuthority,
+		older: kitEntry(config.olderTransferFee),
+		newer: kitEntry(config.newerTransferFee),
+	};
+}
+
+function scheduleEntry(): number[] {
+	const payload = new Uint8Array(108);
+	const view = new DataView(payload.buffer);
+	payload.fill(9, 0, 32);
+	for (const [start, fee] of [
+		[72, TWO_ENTRY_SCHEDULE.older],
+		[90, TWO_ENTRY_SCHEDULE.newer],
+	] as const) {
+		view.setBigUint64(start, fee.epoch, true);
+		view.setBigUint64(start + 8, fee.maximumFee, true);
+		view.setUint16(start + 16, fee.basisPoints, true);
+	}
+	return [1, 0, 108, 0, ...payload];
+}
+
+function assertAgreesWithKit(
+	data: Uint8Array,
+	hasFee: boolean,
+	label: string,
+): void {
+	const kit = kitConfig(data);
+	assert.equal(kit !== undefined, hasFee, `${label}: kit presence`);
+	assert.deepEqual(
+		decodeTransferFeeConfig(data, TOKEN_2022_PROGRAM_ADDRESS),
+		kit,
+		label,
+	);
+}
+
+describe('decodeTransferFeeConfig agrees with @solana-program/token-2022', () => {
+	it('on the live tKalshi and AAPLx mints', () => {
+		assertAgreesWithKit(accountBytes(TKALSHI_ACCOUNT), true, 'tKalshi');
+		assertAgreesWithKit(accountBytes(AAPLX_ACCOUNT), false, 'AAPLx');
+	});
+
+	// Token-2022 pads by two bytes past `Multisig::LEN`, so tails are even; kit
+	// throws on an odd one that SPL reads as the end of the list.
+	it('with the fee config anywhere, or absent, at every tail Token-2022 writes', () => {
+		const shapes = [
+			['fee config only', scheduleEntry(), true],
+			[
+				'fee config after another',
+				[...METADATA_POINTER, ...scheduleEntry()],
+				true,
+			],
+			['no fee config', METADATA_POINTER, false],
+		] as const;
+		for (const [shape, tlv, hasFee] of shapes) {
+			for (const tail of [0, 2, 64]) {
+				assertAgreesWithKit(
+					token2022MintBytes([...tlv, ...zeros(tail)]),
+					hasFee,
+					`${shape}, tail of ${tail}`,
+				);
+			}
+		}
 	});
 });
 

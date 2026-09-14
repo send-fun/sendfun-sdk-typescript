@@ -28,11 +28,12 @@ const ACCOUNT_TYPE_MINT = 1;
 
 const TLV_START = 166;
 
+const TLV_TYPE = 2;
+
 const TLV_HEADER = 4;
 
 const TRANSFER_FEE_CONFIG_TYPE = 1;
 
-// Trailing rent slack reads as `ExtensionType::Uninitialized`, ending the list.
 const UNINITIALIZED_TYPE = 0;
 
 // Config authority, withdraw authority, `withheld_amount` u64, then older and
@@ -111,14 +112,16 @@ export function decodeTransferFeeConfig(
 
 	let offset = TLV_START;
 	while (offset < data.length) {
+		// Too short for a type, or a zero type: trailing slack, as SPL reads it.
+		if (offset + TLV_TYPE > data.length) return undefined;
+		const extensionType = view.getUint16(offset, true);
+		if (extensionType === UNINITIALIZED_TYPE) return undefined;
+
 		if (offset + TLV_HEADER > data.length) {
 			throw new RangeError(
 				'decodeTransferFeeConfig: a TLV entry header runs past the end of the account',
 			);
 		}
-
-		const extensionType = view.getUint16(offset, true);
-		if (extensionType === UNINITIALIZED_TYPE) return undefined;
 
 		const length = view.getUint16(offset + 2, true);
 		const payload = offset + TLV_HEADER;

@@ -70,7 +70,8 @@ export async function buyExactOut(
 	return {
 		instruction: await buildBuyExactOutInstruction({
 			...params,
-			amountOut: params.baseAmountOut,
+			// Capped at the supply left. The program reverts a short fill.
+			amountOut: quote.baseToUser,
 			maxAmountIn: maxQuoteIn,
 		}),
 		quote,

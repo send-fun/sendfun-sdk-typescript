@@ -63,6 +63,7 @@
 	},
 	"dependencies": {},
 	"devDependencies": {
+		"@solana-program/token-2022": "^0.9.0",
 		"@solana/kit": "^6.10.0",
 		"@solana/program-client-core": "^6.10.0",
 		"@types/node": "^24.10.4",

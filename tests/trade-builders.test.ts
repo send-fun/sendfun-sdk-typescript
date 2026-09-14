@@ -260,3 +260,50 @@ describe('create-and-buy appends the buy to the create', () => {
 		});
 	});
 });
+
+describe('launchpad buyExactOut signs an amount the curve can deliver', () => {
+	const decoder =
+		launchpad.instructions.getBuyExactOutInstructionDataDecoder();
+	const CAP = 1_000_000_000n;
+
+	function signed(instruction: Instruction) {
+		return decoder.decode(instruction.data ?? new Uint8Array());
+	}
+
+	it('passes a request under the supply left through unchanged', async () => {
+		const { instruction, quote } = await launchpad.trade.buyExactOut({
+			...SHARED,
+			...CURVE_RESERVES,
+			baseAmountOut: 10_000_000_000n,
+		});
+
+		assert.equal(quote.baseToUser, 10_000_000_000n);
+		assert.equal(signed(instruction).amountOut, 10_000_000_000n);
+	});
+
+	it('clamps a request over the supply left to the capped fill', async () => {
+		const { instruction, quote } = await launchpad.trade.buyExactOut({
+			...SHARED,
+			...CURVE_RESERVES,
+			realBaseReserves: CAP,
+			baseAmountOut: 5_000_000_000n,
+		});
+
+		assert.equal(quote.baseToUser, CAP);
+		assert.equal(signed(instruction).amountOut, CAP);
+	});
+
+	it('clamps to what the buyer nets once the base mint takes its cut', async () => {
+		const { instruction, quote } = await launchpad.trade.buyExactOut({
+			...SHARED,
+			...CURVE_RESERVES,
+			realBaseReserves: CAP,
+			baseFee: TWENTY_BPS,
+			baseAmountOut: 5_000_000_000n,
+		});
+
+		assert.equal(quote.baseAmount, CAP);
+		assert.equal(quote.baseToUser, 998_000_000n);
+		assert.equal(signed(instruction).amountOut, 998_000_000n);
+	});
+});

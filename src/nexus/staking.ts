@@ -488,12 +488,13 @@ export async function fetchSendMint(
 
 export interface PendingReward {
 	rewardMint: Address;
-	/** Base units of `rewardMint`. */
+	/** Base units of `rewardMint` debited at the vault (matches `ClaimEvent.amount`); a
+	 *  `TransferFeeConfig` mint delivers less -- net it with `transferFee.fetchMintFees`. */
 	pending: bigint;
 }
 
 /** One entry per reward mint, in `knownRewardMints` order, else sorted by address. Each amount is in
- *  its own mint's base units, so never sum them. */
+ *  its own mint's base units, so never sum them, and is the vault's debit, not the claimant's credit. */
 export async function fetchPendingRewards(
 	rpc: RewardMintRpc & Rpc<GetMultipleAccountsApi>,
 	user: Address,
