@@ -20,7 +20,7 @@ import {
 	addSelfPlanAndSendFunctions,
 	type SelfFetchFunctions,
 	type SelfPlanAndSendFunctions,
-} from '@solana/program-client-core';
+} from '@solana/kit/program-client-core';
 import {
 	fetchAllAltRegistry,
 	fetchAllCreatorFeeConfig,

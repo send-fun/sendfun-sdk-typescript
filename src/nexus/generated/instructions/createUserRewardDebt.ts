@@ -38,7 +38,7 @@ import {
 	getAccountMetaFactory,
 	getAddressFromResolvedInstructionAccount,
 	type ResolvedInstructionAccount,
-} from '@solana/program-client-core';
+} from '@solana/kit/program-client-core';
 import {
 	findRewardStatePda,
 	findUserRewardDebtPda,

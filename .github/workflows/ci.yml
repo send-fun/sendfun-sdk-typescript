@@ -1,4 +1,5 @@
-# Typecheck, build, test, format-check and pack the SDK.
+# Typecheck, build, test, format-check and pack the SDK, then install the
+# packed SDK into kit 6, 7 and 8 consumer projects.
 name: CI
 
 on:
@@ -35,3 +36,23 @@ jobs:
             - run: pnpm run test
             - run: pnpm run format:check
             - run: pnpm pack --dry-run
+
+    compat:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v7
+
+            # Reads the pnpm version from `packageManager` in package.json.
+            - uses: pnpm/setup@v2
+              with:
+                  install: false
+
+            - uses: actions/setup-node@v7
+              with:
+                  node-version: 24
+                  cache: pnpm
+
+            - run: pnpm install --frozen-lockfile
+            - run: pnpm run build
+            # Installs each consumer project from the npm registry.
+            - run: pnpm exec tsx compat/run.ts

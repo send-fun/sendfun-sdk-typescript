@@ -45,7 +45,7 @@ import {
 	getAddressFromResolvedInstructionAccount,
 	getNonNullResolvedInstructionInput,
 	type ResolvedInstructionAccount,
-} from '@solana/program-client-core';
+} from '@solana/kit/program-client-core';
 import { EVENT_AUTHORITY_PDA_ADDRESS, findPoolPda } from '../pdas/index.js';
 import { SEND_DEX_PROGRAM_ADDRESS } from '../programs/index.js';
 

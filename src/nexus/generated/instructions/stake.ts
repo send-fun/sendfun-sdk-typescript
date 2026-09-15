@@ -44,7 +44,7 @@ import {
 	getAccountMetaFactory,
 	getAddressFromResolvedInstructionAccount,
 	type ResolvedInstructionAccount,
-} from '@solana/program-client-core';
+} from '@solana/kit/program-client-core';
 import {
 	EVENT_AUTHORITY_PDA_ADDRESS,
 	findUserStakePositionPda,

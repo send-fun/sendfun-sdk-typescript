@@ -12,8 +12,17 @@ It does not send transactions.
 ## Install
 
 ```sh
-pnpm add @send-fun/sdk
+pnpm add @send-fun/sdk @solana/kit
 ```
+
+`@solana/kit` is the only peer dependency: 6.x from 6.10.0, 7.x or 8.x. The SDK
+uses the `@solana/program-client-core` that your kit release ships, through
+`@solana/kit/program-client-core`, so do not install that package separately
+for it.
+
+That subpath needs `package.json` `exports` support: TypeScript
+`moduleResolution` set to `node16`, `nodenext` or `bundler` (not `node10`), and
+Metro 0.82 or later on React Native.
 
 ## Rules
 

@@ -343,8 +343,9 @@ describe('decodeTransferFeeConfig agrees with @solana-program/token-2022', () =>
 		assertAgreesWithKit(accountBytes(AAPLX_ACCOUNT), false, 'AAPLx');
 	});
 
-	// Token-2022 pads by two bytes past `Multisig::LEN`, so tails are even; kit
-	// throws on an odd one that SPL reads as the end of the list.
+	// Token-2022 pads by two bytes past `Multisig::LEN`, so tails are even. Kit's
+	// decoder before 0.17.0, the one a kit 6 install gets, throws on an odd one
+	// that SPL reads as the end of the list.
 	it('with the fee config anywhere, or absent, at every tail Token-2022 writes', () => {
 		const shapes = [
 			['fee config only', scheduleEntry(), true],
