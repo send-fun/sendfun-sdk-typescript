@@ -1,5 +1,5 @@
 import type { TransactionSigner } from '@solana/kit';
 import type { DEFAULT_PARTNER } from '../constants.js';
 
-/** Non-default partners must sign; only `DEFAULT_PARTNER` is valid as a bare address. */
+/** A partner signer, or `DEFAULT_PARTNER` as a bare address. Any other partner must sign. */
 export type PartnerInput = TransactionSigner | typeof DEFAULT_PARTNER;

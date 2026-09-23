@@ -66,7 +66,7 @@ const KNOWN_NEXUS_EVENT_AUTH = address(
 const KNOWN_WSOL_REWARD_STATE = address(
 	'B9Z3t5c3AFtbuUfdeK41zGGL3dQ2AkgtGCjTcakZYwFr',
 );
-// Matches Rust `find_creator_fee_config_pda`; the only guard against a codama seed regression.
+// Matches Rust `find_creator_fee_config_pda`. Guards the codama seeds.
 const KNOWN_CREATOR_FEE_CONFIG = address(
 	'9naWqjy2pqFvQ2Wd2EbiUnRuEEnKzAteAcjpqjtyUZx6',
 );
@@ -248,7 +248,6 @@ describe('findFeePresetPda', () => {
 		assert.notEqual(a, b);
 	});
 
-	// A shared address would price one platform's launches off another's tier table.
 	it('the same index on different platforms produces different addresses', async () => {
 		const [a] = await findFeePresetPda({
 			index: 1,
@@ -347,7 +346,6 @@ describe('findRewardAccrualPda', () => {
 		assert.notEqual(a, b);
 	});
 
-	// Same seeds, per-program addresses: a total read from one program alone is silently short.
 	it('the two platforms derive different addresses from the same mint', async () => {
 		const [launchpad] = await findLaunchpadRewardAccrualPda({
 			quoteMint: WSOL_MINT,

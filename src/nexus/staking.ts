@@ -17,6 +17,7 @@ import {
 } from '../constants.js';
 import { fetchInChunks } from '../utils/chunk.js';
 import { findAssociatedTokenPda } from '../utils/pda.js';
+import { accountIsCreated } from './generated/shared/index.js';
 import { fetchStakingConfig } from './generated/accounts/stakingConfig.js';
 import {
 	fetchMaybeUserStakePosition,
@@ -42,10 +43,10 @@ import { findRewardAccrualPda as findLaunchpadRewardAccrualPda } from '../launch
 import { getRewardAccrualDecoder } from '../launchpad/generated/accounts/rewardAccrual.js';
 import { findRewardAccrualPda as findDexRewardAccrualPda } from '../dex/generated/pdas/rewardAccrual.js';
 
-// 1e12 scale of `RewardAccrual.accPerToken` on both programs; must match send_shared `PRECISION`.
+// Fixed-point scale of `RewardAccrual.accPerToken` in both programs.
 const PRECISION = 1_000_000_000_000n;
 
-/** `getProgramAccounts` is optional: many providers restrict it and LiteSVM lacks it, so pass `rewardMints` there. */
+/** An RPC with `getAccountInfo` and, optionally, `getProgramAccounts`. Without `getProgramAccounts`, pass `rewardMints`. */
 export type RewardMintRpc = Rpc<GetAccountInfoApi> &
 	Partial<Rpc<GetProgramAccountsApi>>;
 
@@ -55,7 +56,7 @@ function hasProgramAccounts(
 	return typeof rpc.getProgramAccounts === 'function';
 }
 
-// On-chain body offsets + 8 for the discriminator; pinned by tests/staking.test.ts.
+// Field offsets, including the 8-byte discriminator. tests/staking.test.ts pins them.
 const REWARD_STATE_STAKING_CONFIG_OFFSET = 10n;
 const REWARD_STATE_REWARD_MINT_OFFSET = 42;
 
@@ -65,9 +66,8 @@ function compareAddresses(a: Address, b: Address): number {
 	return 0;
 }
 
-/** Registered reward mints, sorted by address. Includes disabled mints: their accrued balance is
- *  still owed and the settle gate still counts them. Throws when the sweep disagrees with
- *  `StakingConfig.rewardCount` rather than settle a short list. */
+/** Returns every registered reward mint, disabled mints included, sorted by address.
+ *  Throws if the count differs from `StakingConfig.rewardCount`. */
 export async function getRewardMints(
 	rpc: Rpc<GetAccountInfoApi> & Rpc<GetProgramAccountsApi>,
 ): Promise<readonly Address[]> {
@@ -98,7 +98,7 @@ export async function getRewardMints(
 	const mints: Address[] = [];
 	for (const { account } of accounts) {
 		const data = base64.encode(account.data[0]);
-		// Another nexus account of the same size could pass both filters.
+		// Another nexus account of the same size can pass both filters.
 		if (!containsBytes(data, REWARD_STATE_DISCRIMINATOR, 0)) continue;
 		mints.push(
 			addressDecoder.decode(data, REWARD_STATE_REWARD_MINT_OFFSET),
@@ -136,13 +136,14 @@ async function resolveRewardMints(
 }
 
 export interface SettleParams {
-	/** `settle` is permissionless: the user does not sign. */
+	/** Does not sign. `settle` is permissionless. */
 	user: Address;
 	payer: TransactionSigner;
 	stakingMint: Address;
 }
 
-/** One idempotent `settle` per mint; a partial mint list leaves `stake` and `unstake` failing `RewardsNotSettled`. */
+/** Builds one `settle` per reward mint. `source` is the mint list, or an RPC to read it from.
+ *  `settle` is idempotent. With a partial list, `stake` and `unstake` fail with `RewardsNotSettled`. */
 export async function buildSettleInstructions(
 	source: RewardMintSource,
 	params: SettleParams,
@@ -187,7 +188,7 @@ export async function fetchMissingUserRewardDebts(
 
 	const missingMints: Address[] = [];
 	for (const [index, rewardMint] of rewardMints.entries()) {
-		if (!encodedAccounts[index].exists) {
+		if (!accountIsCreated(encodedAccounts[index])) {
 			missingMints.push(rewardMint);
 		}
 	}
@@ -199,16 +200,17 @@ export interface PrepareStakingParams {
 	user: Address;
 	payer: TransactionSigner;
 	stakingMint: Address;
-	/** Must be the full registry when supplied; a subset leaves `stake` and `unstake` blocked. */
+	/** If given, must hold every registered mint. With a subset, `stake` and `unstake` fail. */
 	rewardMints?: readonly Address[];
 }
 
-/** Opens missing `UserRewardDebt`s, then settles every mint; the user never signs, so the stake or unstake after is one wallet prompt. */
+/** Builds a `create_user_reward_debt` for each missing `UserRewardDebt`, then a `settle` for every
+ *  reward mint. The user does not sign these instructions. */
 export async function buildStakingPreflightInstructions(
 	rpc: RewardMintRpc & Rpc<GetMultipleAccountsApi>,
 	params: PrepareStakingParams,
 ): Promise<Instruction[]> {
-	// One sweep for both halves: two sweeps can disagree.
+	// Read the mints once. Two reads can return different lists.
 	const rewardMints = await resolveRewardMints(rpc, params.rewardMints);
 
 	const missingMints = await fetchMissingUserRewardDebts(
@@ -234,7 +236,7 @@ export async function buildStakingPreflightInstructions(
 	return [...createIxs, ...settleIxs];
 }
 
-/** True once `stake` and `unstake` will pass the `settledCount == rewardCount` gate. */
+/** Returns true if `stake` and `unstake` pass the `settledCount == rewardCount` check. */
 export async function isFullySettled(
 	rpc: Rpc<GetAccountInfoApi>,
 	user: Address,
@@ -255,7 +257,8 @@ export interface StakeParams {
 	amount: bigint;
 }
 
-/** Fails `RewardsNotSettled` until every mint is settled at the current `stakeVersion`; run `buildStakingPreflightInstructions` first. */
+/** The instruction fails with `RewardsNotSettled` until every mint is settled at the current
+ *  `stakeVersion`. Run `buildStakingPreflightInstructions` first. */
 export async function buildStakeInstruction(
 	params: StakeParams,
 ): Promise<Instruction> {
@@ -274,8 +277,9 @@ export interface UnstakeParams {
 	amount: bigint;
 }
 
-/** Settle immediately before via `buildStakingPreflightInstructions`: the gate passes on a stale settle,
- *  and the window since it is then paid at the post-unstake amount, forfeiting accrual. */
+/** Run `buildStakingPreflightInstructions` immediately before. The check also passes on an older
+ *  settle. Rewards since that settle then accrue on the smaller post-unstake amount, and the
+ *  difference is lost. */
 export async function buildUnstakeInstruction(
 	params: UnstakeParams,
 ): Promise<Instruction> {
@@ -291,12 +295,12 @@ export interface ClaimRewardsParams {
 	user: TransactionSigner;
 	payer?: TransactionSigner;
 	stakingMint: Address;
-	/** Defaults to every registered mint; each claim settles its own mint, so a subset needs no preflight. */
+	/** Defaults to every registered mint. A subset needs no preflight: each `claim` settles its own mint. */
 	rewardMints?: readonly Address[];
 }
 
-/** One `claim` per mint, preceded by `create_user_reward_debt` where the debt is missing:
- *  `Claim` requires the account to exist, so one missing debt fails the whole transaction. */
+/** Builds one `claim` per reward mint. A `create_user_reward_debt` comes before each `claim` whose
+ *  `UserRewardDebt` is missing: `claim` fails without it. Throws if a mint has no `RewardState`. */
 export async function buildClaimRewardsInstructions(
 	rpc: RewardMintRpc & Rpc<GetMultipleAccountsApi>,
 	params: ClaimRewardsParams,
@@ -337,7 +341,7 @@ export async function buildClaimRewardsInstructions(
 	const perMint = await Promise.all(
 		rewardMints.map(async (rewardMint, index) => {
 			const encodedRewardState = fetched[index];
-			if (!encodedRewardState.exists) {
+			if (!accountIsCreated(encodedRewardState)) {
 				throw new Error(`RewardState not found for mint ${rewardMint}`);
 			}
 			const { vault } = rewardStateDecoder.decode(
@@ -356,8 +360,8 @@ export async function buildClaimRewardsInstructions(
 
 			const instructions: Instruction[] = [];
 
-			// Directly before its own `claim`, so slicing the list by mint keeps each pair together.
-			if (!fetched[rewardMints.length * 2 + index].exists) {
+			// Directly before its own `claim`, so a split of the list by mint keeps each pair together.
+			if (!accountIsCreated(fetched[rewardMints.length * 2 + index])) {
 				instructions.push(
 					await getCreateUserRewardDebtInstructionAsync({
 						user: params.user.address,
@@ -395,12 +399,13 @@ export interface WithdrawFeesAccounts {
 	tokenProgram: Address;
 }
 
-/** Accounts for one mint's `withdraw_fees`; call once per mint. */
+/** Returns the accounts of `withdraw_fees` for one reward mint. Without `tokenProgram`, reads it
+ *  from the mint account. Throws if that account does not exist. */
 export async function buildWithdrawFeesAccounts(
 	rpc: Rpc<GetAccountInfoApi>,
 	params: {
 		rewardMint: Address;
-		/** Wallet, not token account: its ATA is derived. */
+		/** A wallet, not a token account. The SDK derives its ATA. */
 		destination: Address;
 		tokenProgram?: Address;
 	},
@@ -467,13 +472,12 @@ export async function fetchUserStakePositionData(
 	return maybePosition.exists ? maybePosition.data : null;
 }
 
-/** Unbound reads as `Pubkey::default()` (the system program address), which `bind_staking_mint`
- *  can never store: it requires a token mint. */
+/** Returns false for the system program address, the value of an unbound staking mint. */
 export function isStakingMintBound(stakingMint: Address): boolean {
 	return stakingMint !== SYSTEM_PROGRAM_ADDRESS;
 }
 
-/** The staking mint is immutable once bound, so this result is safe to cache. */
+/** Returns the staking mint. Throws if no staking mint is bound. A bound staking mint cannot change. */
 export async function fetchSendMint(
 	rpc: Rpc<GetAccountInfoApi>,
 ): Promise<Address> {
@@ -488,13 +492,14 @@ export async function fetchSendMint(
 
 export interface PendingReward {
 	rewardMint: Address;
-	/** Base units of `rewardMint` debited at the vault (matches `ClaimEvent.amount`); a
-	 *  `TransferFeeConfig` mint delivers less -- net it with `transferFee.fetchMintFees`. */
+	/** Amount the vault sends, in raw units of `rewardMint`. Equals `ClaimEvent.amount`. A mint with a
+	 *  transfer fee delivers less. Get the fee with `transferFee.fetchMintFees`. */
 	pending: bigint;
 }
 
-/** One entry per reward mint, in `knownRewardMints` order, else sorted by address. Each amount is in
- *  its own mint's base units, so never sum them, and is the vault's debit, not the claimant's credit. */
+/** Returns one entry per reward mint, in `knownRewardMints` order, else sorted by address. Each amount
+ *  is in the raw units of its own mint. Do not add them together. Each amount is what the vault sends,
+ *  before the mint's transfer fee. */
 export async function fetchPendingRewards(
 	rpc: RewardMintRpc & Rpc<GetMultipleAccountsApi>,
 	user: Address,
@@ -541,33 +546,32 @@ export async function fetchPendingRewards(
 	);
 
 	const userRewardDebtDecoder = getUserRewardDebtDecoder();
-	// One decoder for both: the two `RewardAccrual` types share shape and discriminator.
+	// One decoder for both: the two `RewardAccrual` types have the same layout and discriminator.
 	const rewardAccrualDecoder = getRewardAccrualDecoder();
 
 	return pdas.map(({ rewardMint }, index) => {
 		const base = index * 3;
 
 		const encodedDebt = encodedAccounts[base];
-		// A missing debt is not zero owed: `create_user_reward_debt` opens it at
-		// `accSnapshot = 0`, `amountSnapshot = position.amount`, and the claim pays that.
-		const debt = encodedDebt.exists
+		// A missing debt is not zero owed. `create_user_reward_debt` opens it at
+		// `accSnapshot = 0` and `amountSnapshot = position.amount`, and the claim pays from there.
+		const debt = accountIsCreated(encodedDebt)
 			? userRewardDebtDecoder.decode(encodedDebt.data)
 			: { owed: 0n, accSnapshot: 0n, amountSnapshot: stakeAmount };
 
 		const encodedLaunchpadAccrual = encodedAccounts[base + 1];
-		const launchpadAcc = encodedLaunchpadAccrual.exists
+		const launchpadAcc = accountIsCreated(encodedLaunchpadAccrual)
 			? rewardAccrualDecoder.decode(encodedLaunchpadAccrual.data)
 					.accPerToken
 			: 0n;
 
 		const encodedDexAccrual = encodedAccounts[base + 2];
-		const dexAcc = encodedDexAccrual.exists
+		const dexAcc = accountIsCreated(encodedDexAccrual)
 			? rewardAccrualDecoder.decode(encodedDexAccrual.data).accPerToken
 			: 0n;
 
-		// Mirrors `settle_debt`: basis is the smaller amount (`amountSnapshot` alone over-quotes
-		// after an unstake), floored once over the summed accumulators. A negative delta quotes 0
-		// where the program would fail.
+		// Matches `settle`: the basis is the smaller amount, floored once over the summed
+		// accumulators. A negative delta quotes 0, where the program fails.
 		const basis =
 			debt.amountSnapshot < stakeAmount
 				? debt.amountSnapshot

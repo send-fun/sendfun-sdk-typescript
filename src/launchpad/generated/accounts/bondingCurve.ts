@@ -42,6 +42,7 @@ import {
 	type ReadonlyUint8Array,
 } from '@solana/kit';
 import { SEND_LAUNCHPAD_PROGRAM_ADDRESS } from '../programs/index.js';
+import { accountIsCreated } from '../shared/index.js';
 import {
 	getBondingCurveStatusDecoder,
 	getBondingCurveStatusEncoder,
@@ -191,9 +192,25 @@ export function getBondingCurveCodec(): FixedSizeCodec<
 	return combineCodec(getBondingCurveEncoder(), getBondingCurveDecoder());
 }
 
+/**
+ * Decodes a `BondingCurve` account, throwing when another program owns it or its discriminator
+ * does not match.
+ *
+ * Unlike {@link fetchMaybeBondingCurve}, this throws for an address that only holds lamports rather
+ * than returning the non-existing variant: an account passed as existing must never come back as that
+ * variant typed as an `Account`. Apply {@link accountIsCreated} first to accounts fetched another way.
+ */
 export function decodeBondingCurve<TAddress extends string = string>(
 	encodedAccount: EncodedAccount<TAddress>,
 ): Account<BondingCurve, TAddress>;
+/**
+ * Decodes a `BondingCurve` account, throwing when another program owns it or its discriminator
+ * does not match.
+ *
+ * Unlike {@link fetchMaybeBondingCurve}, this throws for an address that only holds lamports rather
+ * than returning the non-existing variant: an account passed as existing must never come back as that
+ * variant typed as an `Account`. Apply {@link accountIsCreated} first to accounts fetched another way.
+ */
 export function decodeBondingCurve<TAddress extends string = string>(
 	encodedAccount: MaybeEncodedAccount<TAddress>,
 ): MaybeAccount<BondingCurve, TAddress>;
@@ -224,6 +241,7 @@ export function decodeBondingCurve<TAddress extends string = string>(
 	);
 }
 
+/** Fetches a `BondingCurve` account, throwing when it does not exist or only holds lamports. */
 export async function fetchBondingCurve<TAddress extends string = string>(
 	rpc: Parameters<typeof fetchEncodedAccount>[0],
 	address: Address<TAddress>,
@@ -234,15 +252,25 @@ export async function fetchBondingCurve<TAddress extends string = string>(
 	return maybeAccount;
 }
 
+/**
+ * Fetches a `BondingCurve` account, or the non-existing variant when the address holds no
+ * account or only lamports (see {@link accountIsCreated}).
+ * {@link decodeBondingCurve} throws for a lamports-only account instead.
+ */
 export async function fetchMaybeBondingCurve<TAddress extends string = string>(
 	rpc: Parameters<typeof fetchEncodedAccount>[0],
 	address: Address<TAddress>,
 	config?: FetchAccountConfig,
 ): Promise<MaybeAccount<BondingCurve, TAddress>> {
 	const maybeAccount = await fetchEncodedAccount(rpc, address, config);
-	return decodeBondingCurve(maybeAccount);
+	return decodeBondingCurve(
+		accountIsCreated(maybeAccount)
+			? maybeAccount
+			: { address, exists: false },
+	);
 }
 
+/** Fetches `BondingCurve` accounts, throwing when any does not exist or only holds lamports. */
 export async function fetchAllBondingCurve(
 	rpc: Parameters<typeof fetchEncodedAccounts>[0],
 	addresses: Array<Address>,
@@ -257,6 +285,11 @@ export async function fetchAllBondingCurve(
 	return maybeAccounts;
 }
 
+/**
+ * Fetches `BondingCurve` accounts, with the non-existing variant for each address that holds
+ * no account or only lamports (see {@link accountIsCreated}).
+ * {@link decodeBondingCurve} throws for a lamports-only account instead.
+ */
 export async function fetchAllMaybeBondingCurve(
 	rpc: Parameters<typeof fetchEncodedAccounts>[0],
 	addresses: Array<Address>,
@@ -264,7 +297,11 @@ export async function fetchAllMaybeBondingCurve(
 ): Promise<MaybeAccount<BondingCurve>[]> {
 	const maybeAccounts = await fetchEncodedAccounts(rpc, addresses, config);
 	return maybeAccounts.map((maybeAccount) =>
-		decodeBondingCurve(maybeAccount),
+		decodeBondingCurve(
+			accountIsCreated(maybeAccount)
+				? maybeAccount
+				: { address: maybeAccount.address, exists: false },
+		),
 	);
 }
 

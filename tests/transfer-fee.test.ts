@@ -23,8 +23,8 @@ const QUOTE_20_BPS = { bps: 20, maximumFee: U64_MAX } satisfies MintFee;
 
 const BASE_100_BPS = { bps: 100, maximumFee: U64_MAX } satisfies MintFee;
 
-// RangeErrors pin the message: `TransferFeeNotSettleableError` extends
-// `RangeError`, so a class check cannot separate the failure modes.
+// RangeError checks pin the message. `TransferFeeNotSettleableError` extends
+// `RangeError`, so the class alone does not identify the failure.
 const BPS_OUT_OF_RANGE = {
 	name: 'RangeError',
 	message: 'MintFee: bps must be an integer between 0 and 10_000',
@@ -257,7 +257,7 @@ describe('buyExactIn with transfer fees', () => {
 					feeBps: FEE_BPS,
 					quoteFee: { bps: 10_000, maximumFee: U64_MAX },
 				}),
-			// Zeroed leg, not unsettleable: the message is the only thing that tells them apart.
+			// A zeroed leg, not an unsettleable one. Only the message tells them apart.
 			{ name: 'RangeError', message: 'buyExactIn: invalid amount' },
 		);
 	});
@@ -382,7 +382,7 @@ describe('sellExactIn with transfer fees', () => {
 					feeBps: FEE_BPS,
 					baseFee: { bps: 10_000, maximumFee: U64_MAX },
 				}),
-			// Zeroed leg, not unsettleable: the message is the only thing that tells them apart.
+			// A zeroed leg, not an unsettleable one. Only the message tells them apart.
 			{ name: 'RangeError', message: 'sellExactIn: invalid amount' },
 		);
 	});

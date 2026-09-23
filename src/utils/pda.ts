@@ -7,7 +7,7 @@ import {
 
 const addressEncoder = getAddressEncoder();
 
-/** Seed order is [wallet, tokenProgram, mint], not the parameter order. */
+/** Derives the associated token account of `wallet` for `mint` under `tokenProgram`. */
 export async function findAssociatedTokenPda(
 	wallet: Address,
 	mint: Address,

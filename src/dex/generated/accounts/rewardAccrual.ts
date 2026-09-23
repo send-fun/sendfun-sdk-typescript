@@ -42,6 +42,7 @@ import {
 	type ReadonlyUint8Array,
 } from '@solana/kit';
 import { SEND_DEX_PROGRAM_ADDRESS } from '../programs/index.js';
+import { accountIsCreated } from '../shared/index.js';
 
 export const REWARD_ACCRUAL_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([
 	158, 244, 116, 30, 227, 132, 105, 182,
@@ -109,9 +110,25 @@ export function getRewardAccrualCodec(): FixedSizeCodec<
 	return combineCodec(getRewardAccrualEncoder(), getRewardAccrualDecoder());
 }
 
+/**
+ * Decodes a `RewardAccrual` account, throwing when another program owns it or its discriminator
+ * does not match.
+ *
+ * Unlike {@link fetchMaybeRewardAccrual}, this throws for an address that only holds lamports rather
+ * than returning the non-existing variant: an account passed as existing must never come back as that
+ * variant typed as an `Account`. Apply {@link accountIsCreated} first to accounts fetched another way.
+ */
 export function decodeRewardAccrual<TAddress extends string = string>(
 	encodedAccount: EncodedAccount<TAddress>,
 ): Account<RewardAccrual, TAddress>;
+/**
+ * Decodes a `RewardAccrual` account, throwing when another program owns it or its discriminator
+ * does not match.
+ *
+ * Unlike {@link fetchMaybeRewardAccrual}, this throws for an address that only holds lamports rather
+ * than returning the non-existing variant: an account passed as existing must never come back as that
+ * variant typed as an `Account`. Apply {@link accountIsCreated} first to accounts fetched another way.
+ */
 export function decodeRewardAccrual<TAddress extends string = string>(
 	encodedAccount: MaybeEncodedAccount<TAddress>,
 ): MaybeAccount<RewardAccrual, TAddress>;
@@ -142,6 +159,7 @@ export function decodeRewardAccrual<TAddress extends string = string>(
 	);
 }
 
+/** Fetches a `RewardAccrual` account, throwing when it does not exist or only holds lamports. */
 export async function fetchRewardAccrual<TAddress extends string = string>(
 	rpc: Parameters<typeof fetchEncodedAccount>[0],
 	address: Address<TAddress>,
@@ -152,15 +170,25 @@ export async function fetchRewardAccrual<TAddress extends string = string>(
 	return maybeAccount;
 }
 
+/**
+ * Fetches a `RewardAccrual` account, or the non-existing variant when the address holds no
+ * account or only lamports (see {@link accountIsCreated}).
+ * {@link decodeRewardAccrual} throws for a lamports-only account instead.
+ */
 export async function fetchMaybeRewardAccrual<TAddress extends string = string>(
 	rpc: Parameters<typeof fetchEncodedAccount>[0],
 	address: Address<TAddress>,
 	config?: FetchAccountConfig,
 ): Promise<MaybeAccount<RewardAccrual, TAddress>> {
 	const maybeAccount = await fetchEncodedAccount(rpc, address, config);
-	return decodeRewardAccrual(maybeAccount);
+	return decodeRewardAccrual(
+		accountIsCreated(maybeAccount)
+			? maybeAccount
+			: { address, exists: false },
+	);
 }
 
+/** Fetches `RewardAccrual` accounts, throwing when any does not exist or only holds lamports. */
 export async function fetchAllRewardAccrual(
 	rpc: Parameters<typeof fetchEncodedAccounts>[0],
 	addresses: Array<Address>,
@@ -175,6 +203,11 @@ export async function fetchAllRewardAccrual(
 	return maybeAccounts;
 }
 
+/**
+ * Fetches `RewardAccrual` accounts, with the non-existing variant for each address that holds
+ * no account or only lamports (see {@link accountIsCreated}).
+ * {@link decodeRewardAccrual} throws for a lamports-only account instead.
+ */
 export async function fetchAllMaybeRewardAccrual(
 	rpc: Parameters<typeof fetchEncodedAccounts>[0],
 	addresses: Array<Address>,
@@ -182,7 +215,11 @@ export async function fetchAllMaybeRewardAccrual(
 ): Promise<MaybeAccount<RewardAccrual>[]> {
 	const maybeAccounts = await fetchEncodedAccounts(rpc, addresses, config);
 	return maybeAccounts.map((maybeAccount) =>
-		decodeRewardAccrual(maybeAccount),
+		decodeRewardAccrual(
+			accountIsCreated(maybeAccount)
+				? maybeAccount
+				: { address: maybeAccount.address, exists: false },
+		),
 	);
 }
 

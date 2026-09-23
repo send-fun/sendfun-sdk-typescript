@@ -9,7 +9,7 @@ export interface MigrateParams {
 	caller: TransactionSigner;
 	baseMint: Address;
 	quoteMint: Address;
-	/** `bondingCurve.creatorFeeConfig`; `migrate` rejects any other address. */
+	/** `bondingCurve.creatorFeeConfig`. `migrate` rejects any other address. */
 	creatorFeeConfig: Address;
 	quoteTokenProgram: Address;
 }

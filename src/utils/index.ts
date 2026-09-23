@@ -1,3 +1,5 @@
+// The three programs generate the same function.
+export { accountIsCreated } from '../nexus/generated/shared/index.js';
 export {
 	creatorHashFromId,
 	decodeCreatorId,

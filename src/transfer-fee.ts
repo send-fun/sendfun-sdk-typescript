@@ -1,5 +1,5 @@
-// Hand-parsed so consumers don't inherit `@solana-program/token-2022`. The programs
-// price every leg on what lands after the mint's cut; a quote without it fails slippage.
+// Parses Token-2022 mint data by hand. The SDK does not depend on
+// `@solana-program/token-2022`.
 
 import {
 	getAddressDecoder,
@@ -20,8 +20,8 @@ import { fetchInChunks } from './utils/chunk.js';
 
 const MINT_BASE_LENGTH = 82;
 
-// Token-2022 pads the base mint to the 165-byte token-account length so the two
-// never share a prefix, then stamps the type byte; TLV entries follow it.
+// Token-2022 pads the base mint to 165 bytes, the token-account length. The
+// account-type byte follows, then the TLV entries.
 const ACCOUNT_TYPE_OFFSET = 165;
 
 const ACCOUNT_TYPE_MINT = 1;
@@ -58,7 +58,7 @@ export interface TransferFeeEntry {
 }
 
 export interface TransferFeeConfig {
-	/** `undefined` when the authority is unset: the schedule is frozen forever. */
+	/** `undefined` if the config has no authority. Then the schedule cannot change. */
 	readonly authority: Address | undefined;
 	readonly older: TransferFeeEntry;
 	readonly newer: TransferFeeEntry;
@@ -80,13 +80,14 @@ function readEntry(view: DataView, start: number): TransferFeeEntry {
 	};
 }
 
-/** `owner` is the account's program. `undefined` means no fee extension; anything
- *  unparseable throws `RangeError` rather than pricing a charging mint free. */
+/** Decodes the `TransferFeeConfig` extension of a mint. `owner` is the program that owns the account.
+ *  Returns `undefined` if the mint has no such extension. Throws `RangeError` if `owner` is not a
+ *  token program or `data` is not a valid mint. */
 export function decodeTransferFeeConfig(
 	data: Uint8Array,
 	owner: Address,
 ): TransferFeeConfig | undefined {
-	// Classic SPL can never gain an extension, so this result is permanent.
+	// Classic SPL mints have no extensions.
 	if (owner === TOKEN_PROGRAM_ADDRESS) return undefined;
 	if (owner !== TOKEN_2022_PROGRAM_ADDRESS) {
 		throw new RangeError(
@@ -94,14 +95,14 @@ export function decodeTransferFeeConfig(
 		);
 	}
 
-	// Token-2022 leaves a mint with no extensions unpadded at 82 bytes.
+	// A Token-2022 mint with no extensions is 82 bytes.
 	if (data.length === MINT_BASE_LENGTH) return undefined;
 	if (data.length < TLV_START) {
 		throw new RangeError(
 			`decodeTransferFeeConfig: a Token-2022 mint holds ${data.length} bytes, expected ${MINT_BASE_LENGTH} or at least ${TLV_START}`,
 		);
 	}
-	// Token accounts share this TLV layout with different extension types.
+	// Token accounts use the same TLV layout.
 	if (data[ACCOUNT_TYPE_OFFSET] !== ACCOUNT_TYPE_MINT) {
 		throw new RangeError(
 			`decodeTransferFeeConfig: account type ${data[ACCOUNT_TYPE_OFFSET]} is not a mint`,
@@ -112,7 +113,7 @@ export function decodeTransferFeeConfig(
 
 	let offset = TLV_START;
 	while (offset < data.length) {
-		// Too short for a type, or a zero type: trailing slack, as SPL reads it.
+		// SPL reads a tail too short for a type, or a zero type, as the end of the list.
 		if (offset + TLV_TYPE > data.length) return undefined;
 		const extensionType = view.getUint16(offset, true);
 		if (extensionType === UNINITIALIZED_TYPE) return undefined;
@@ -133,7 +134,7 @@ export function decodeTransferFeeConfig(
 		}
 
 		if (extensionType === TRANSFER_FEE_CONFIG_TYPE) {
-			// Exactly 108 or throw: the extension never writes a wider config.
+			// The extension is always 108 bytes.
 			if (length !== TRANSFER_FEE_CONFIG_LENGTH) {
 				throw new RangeError(
 					`decodeTransferFeeConfig: TransferFeeConfig holds ${length} bytes, expected ${TRANSFER_FEE_CONFIG_LENGTH}`,
@@ -152,7 +153,7 @@ export function decodeTransferFeeConfig(
 	return undefined;
 }
 
-/** Mirrors SPL `get_epoch_fee`: the newer entry is live from its own epoch on. */
+/** Returns the fee for `epoch`, as SPL `get_epoch_fee` does. The newer entry applies from its own epoch on. */
 export function transferFeeAtEpoch(
 	config: TransferFeeConfig,
 	epoch: bigint,
@@ -170,8 +171,8 @@ export function mintFeeAtEpoch(
 	return config === undefined ? undefined : transferFeeAtEpoch(config, epoch);
 }
 
-// Omit the config, never `{ commitment: undefined }`: Kit strips the falsy key and
-// the server's `finalized` wins, where an absent key gets the client's default.
+// Omit the config, not `{ commitment: undefined }`. Kit deletes an undefined key, so the
+// server default `finalized` applies. With no config, the client default applies.
 function currentEpoch(
 	rpc: Rpc<GetEpochInfoApi>,
 	commitment: Commitment | undefined,
@@ -182,8 +183,9 @@ function currentEpoch(
 		.then((info) => info.epoch);
 }
 
-/** A missing account throws, never reads as fee-free. Valid only for `epoch`, which defaults to
- *  the cluster's (a second call). */
+/** Reads the transfer fee of each mint for `epoch`. The result is valid only for that epoch.
+ *  `epoch` defaults to the current cluster epoch, read with `getEpochInfo`. A mint without a
+ *  transfer fee maps to `undefined`. Throws if a mint account is missing or does not decode. */
 export async function fetchMintFees(
 	rpc: Rpc<GetMultipleAccountsApi & GetEpochInfoApi>,
 	mints: readonly Address[],

@@ -42,6 +42,7 @@ import {
 	type ReadonlyUint8Array,
 } from '@solana/kit';
 import { SEND_DEX_PROGRAM_ADDRESS } from '../programs/index.js';
+import { accountIsCreated } from '../shared/index.js';
 import {
 	getPoolStatusDecoder,
 	getPoolStatusEncoder,
@@ -170,9 +171,25 @@ export function getPoolCodec(): FixedSizeCodec<PoolArgs, Pool> {
 	return combineCodec(getPoolEncoder(), getPoolDecoder());
 }
 
+/**
+ * Decodes a `Pool` account, throwing when another program owns it or its discriminator
+ * does not match.
+ *
+ * Unlike {@link fetchMaybePool}, this throws for an address that only holds lamports rather
+ * than returning the non-existing variant: an account passed as existing must never come back as that
+ * variant typed as an `Account`. Apply {@link accountIsCreated} first to accounts fetched another way.
+ */
 export function decodePool<TAddress extends string = string>(
 	encodedAccount: EncodedAccount<TAddress>,
 ): Account<Pool, TAddress>;
+/**
+ * Decodes a `Pool` account, throwing when another program owns it or its discriminator
+ * does not match.
+ *
+ * Unlike {@link fetchMaybePool}, this throws for an address that only holds lamports rather
+ * than returning the non-existing variant: an account passed as existing must never come back as that
+ * variant typed as an `Account`. Apply {@link accountIsCreated} first to accounts fetched another way.
+ */
 export function decodePool<TAddress extends string = string>(
 	encodedAccount: MaybeEncodedAccount<TAddress>,
 ): MaybeAccount<Pool, TAddress>;
@@ -201,6 +218,7 @@ export function decodePool<TAddress extends string = string>(
 	);
 }
 
+/** Fetches a `Pool` account, throwing when it does not exist or only holds lamports. */
 export async function fetchPool<TAddress extends string = string>(
 	rpc: Parameters<typeof fetchEncodedAccount>[0],
 	address: Address<TAddress>,
@@ -211,15 +229,25 @@ export async function fetchPool<TAddress extends string = string>(
 	return maybeAccount;
 }
 
+/**
+ * Fetches a `Pool` account, or the non-existing variant when the address holds no
+ * account or only lamports (see {@link accountIsCreated}).
+ * {@link decodePool} throws for a lamports-only account instead.
+ */
 export async function fetchMaybePool<TAddress extends string = string>(
 	rpc: Parameters<typeof fetchEncodedAccount>[0],
 	address: Address<TAddress>,
 	config?: FetchAccountConfig,
 ): Promise<MaybeAccount<Pool, TAddress>> {
 	const maybeAccount = await fetchEncodedAccount(rpc, address, config);
-	return decodePool(maybeAccount);
+	return decodePool(
+		accountIsCreated(maybeAccount)
+			? maybeAccount
+			: { address, exists: false },
+	);
 }
 
+/** Fetches `Pool` accounts, throwing when any does not exist or only holds lamports. */
 export async function fetchAllPool(
 	rpc: Parameters<typeof fetchEncodedAccounts>[0],
 	addresses: Array<Address>,
@@ -230,13 +258,24 @@ export async function fetchAllPool(
 	return maybeAccounts;
 }
 
+/**
+ * Fetches `Pool` accounts, with the non-existing variant for each address that holds
+ * no account or only lamports (see {@link accountIsCreated}).
+ * {@link decodePool} throws for a lamports-only account instead.
+ */
 export async function fetchAllMaybePool(
 	rpc: Parameters<typeof fetchEncodedAccounts>[0],
 	addresses: Array<Address>,
 	config?: FetchAccountsConfig,
 ): Promise<MaybeAccount<Pool>[]> {
 	const maybeAccounts = await fetchEncodedAccounts(rpc, addresses, config);
-	return maybeAccounts.map((maybeAccount) => decodePool(maybeAccount));
+	return maybeAccounts.map((maybeAccount) =>
+		decodePool(
+			accountIsCreated(maybeAccount)
+				? maybeAccount
+				: { address: maybeAccount.address, exists: false },
+		),
+	);
 }
 
 export function getPoolSize(): number {

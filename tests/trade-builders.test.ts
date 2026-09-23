@@ -19,9 +19,9 @@ import {
 
 const USER = address('BA529ggBvon9p6dAHc53uRQiPQgWQaSoAAdJHFGrSEND');
 const BASE_MINT = address('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
-/** Live mainnet Token-2022 mint; its 20 bps schedule prices the figures below. */
+/** Mainnet Token-2022 mint. The figures below use its 20 bps transfer fee. */
 const TKALSHI_MINT = address('TKLSidmLVt3cqGaaodG8tyRzoANfQwoh67AccjmubeZ');
-/** Neither user's ATA: the builder must place it verbatim, not re-derive it. */
+/** Not an ATA of the user. The builder must pass it unchanged. */
 const AUX = address('6ksD4MwN1XHsts93q7e8VaYZsb3rxCPeBYQpdsBDiHyJ');
 const SENDFUN_PLATFORM_ADDRESS = address(
 	'2PJedAsa7pCnScks2XM3U4o2nPaTvvBmi2553VcCnGWB',
@@ -114,7 +114,7 @@ describe('trade builders pass user token accounts through', () => {
 		assert.equal(addresses.includes(AUX), true);
 	});
 
-	// Omitted, the slot falls to the ATA the generated client derives from the IDL `pda`.
+	// When omitted, the generated client derives the ATA from the IDL `pda`.
 	it('launchpad buyExactIn defaults the base slot to the user’s ATA', async () => {
 		const { instruction } = await launchpad.trade.buyExactIn({
 			...SHARED,
@@ -133,7 +133,7 @@ describe('trade builders pass user token accounts through', () => {
 
 describe('create-and-buy appends the buy to the create', () => {
 	const PARTNER = address('Hs3bBEkKQaR9dGkFpQyBtnQvHXWyKMYyYnFVLZ4WM5Ac');
-	// A signer on purpose: the `PartnerConfig` PDA seed must accept one without throwing.
+	// A signer on purpose: the `PartnerConfig` PDA seed must accept one.
 	const partner = createNoopSigner(PARTNER);
 
 	it('emits the create then a buy against the same curve', async () => {
@@ -178,8 +178,8 @@ describe('create-and-buy appends the buy to the create', () => {
 		assert.equal(curveSlot?.role, AccountRole.WRITABLE);
 	});
 
-	// Without the quote schedule the first-buy bound ignores the mint's cut and sits
-	// above the correct one; a cut above slippage reverts the launch.
+	// Without `quoteFee`, the first-buy minimum ignores the mint's cut and is too
+	// high. A cut above slippage then makes the launch fail.
 	describe('with a quote mint that charges in transit', () => {
 		async function buildFirstBuy(quoteFee?: MintFee): Promise<Instruction> {
 			const { instructions } =
@@ -187,7 +187,7 @@ describe('create-and-buy appends the buy to the create', () => {
 					user,
 					coinCreator: USER,
 					baseMint: createNoopSigner(BASE_MINT),
-					// WSOL is classic SPL and cannot carry a transfer-fee schedule.
+					// WSOL is classic SPL and has no transfer fee.
 					quoteMint: TKALSHI_MINT,
 					quoteTokenProgram: TOKEN_2022_PROGRAM_ADDRESS,
 					partner,

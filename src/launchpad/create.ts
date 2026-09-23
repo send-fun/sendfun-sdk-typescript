@@ -15,8 +15,8 @@ export interface CreateTokenParams {
 	name: string;
 	symbol: string;
 	uri: string;
-	/** An enabled nexus auth platform (e.g. "wallet"), max 32 bytes; hashed with
-	 *  `creatorId` into the creator fee identity. Unrelated to `platformConfig`. */
+	/** An enabled nexus auth platform, for example "wallet", of at most 32 bytes. It is hashed
+	 *  with `creatorId` into the creator fee identity. It is not `platformConfig`. */
 	creatorPlatform: string;
 	creatorId: string;
 	partner: PartnerInput;
@@ -30,11 +30,11 @@ export interface CreateAndBuyParams extends CreateTokenParams {
 	slippageBps: number;
 	initialVirtualQuoteReserves: bigint;
 	initialVirtualBaseReserves: bigint;
-	/** `globalConfig.initialRealBaseReserves`: caps the appended buy. */
+	/** `globalConfig.initialRealBaseReserves`. Caps the buy. */
 	initialRealBaseReserves: bigint;
-	/** Quote mint's Token-2022 schedule for the launch epoch; without it `minAmountOut`
-	 *  ignores the mint's cut, and a cut above `slippageBps` can revert the buy. No
-	 *  `baseFee`: this transaction creates the base mint without the extension. */
+	/** The quote mint's transfer fee for the epoch the launch lands in. Without it, `minAmountOut`
+	 *  ignores the mint's cut, and a cut above `slippageBps` can make the buy fail. The new base
+	 *  mint has no transfer fee. */
 	quoteFee?: MintFee;
 }
 
@@ -55,7 +55,7 @@ async function buildCreateTokenInstructionWithHash(
 		creatorHash,
 		quoteMint: params.quoteMint,
 	});
-	// The creation fee is native SOL from `user`; the client derives the WSOL staking vault.
+	// `user` pays the creation fee in native SOL. The generated client fills in the WSOL staking vault.
 	return getCreateTokenInstructionAsync({
 		user: params.user,
 		payer: params.payer ?? params.user,
@@ -98,7 +98,7 @@ export async function buildCreateAndBuyInstructions(
 			virtualQuoteReserves: params.initialVirtualQuoteReserves,
 			virtualBaseReserves: params.initialVirtualBaseReserves,
 			realBaseReserves: params.initialRealBaseReserves,
-			// The curve was just stamped with this same key.
+			// `create_token` sets the curve's `platformConfig` to this key.
 			platformConfig: params.platformConfig,
 			feeBps: params.feeBps,
 			slippageBps: params.slippageBps,

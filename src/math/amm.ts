@@ -4,7 +4,6 @@ const BPS_DIVISOR = 10_000n;
 
 const U64_MAX = 18_446_744_073_709_551_615n;
 
-/** Each call mirrors a `u64::try_from` in the Rust twin; drop one and an oversized leg fails in the encoder. */
 function assertU64(label: string, value: bigint): bigint {
 	if (value > U64_MAX) {
 		throw new RangeError(`${label}: overflows u64`);
@@ -12,15 +11,15 @@ function assertU64(label: string, value: bigint): bigint {
 	return value;
 }
 
-/** Token-2022 `TransferFeeConfig` for the epoch the trade lands in; a stale one misprices the trade. */
+/** A Token-2022 transfer fee for one epoch. Use the fee for the epoch the trade lands in. */
 export interface MintFee {
 	/** 0 to 10_000. */
 	bps: number;
-	/** Cap on the withheld amount, in the mint's raw units. */
+	/** Maximum fee per transfer, in the mint's raw units. */
 	maximumFee: bigint;
 }
 
-/** No transfer lands exactly the requested amount; approximating one hands the program a bound it rejects. */
+/** Thrown when no transfer delivers exactly `amount` after the transfer fee. */
 export class TransferFeeNotSettleableError extends RangeError {
 	readonly amount: bigint;
 	readonly mintFee: MintFee;
@@ -42,7 +41,8 @@ function assertMintFee(fee: MintFee): void {
 	}
 }
 
-/** Rounds up, then caps (SPL's order); swapping them lets a split booking over-credit. */
+/** Returns the transfer fee on `amount`. Rounds up, then caps at `maximumFee`, in SPL's order.
+ *  Returns 0 without `fee`. Throws `RangeError` if `fee` is out of range. */
 export function feeOn(amount: bigint, fee?: MintFee): bigint {
 	if (fee === undefined) return 0n;
 	assertMintFee(fee);
@@ -52,18 +52,18 @@ export function feeOn(amount: bigint, fee?: MintFee): bigint {
 	return raw < fee.maximumFee ? raw : fee.maximumFee;
 }
 
-/** What lands when `amount` is sent; use `grossUp` to land an exact amount. */
+/** Returns what the recipient receives when `amount` is sent. `grossUp` is the inverse. */
 export function amountAfterFee(amount: bigint, fee?: MintFee): bigint {
 	return amount - feeOn(amount, fee);
 }
 
-/** Line-for-line mirror of SPL's `TransferFee::calculate_pre_fee_amount`; `undefined` when no u64 answer exists. */
+/** Matches SPL `TransferFee::calculate_pre_fee_amount`. `undefined` if the result does not fit a u64. */
 function preFeeAmount(amount: bigint, fee: MintFee): bigint | undefined {
 	const bps = BigInt(fee.bps);
 	if (bps === 0n) return amount;
-	// Unreachable via `grossUp`; SPL has it, so the mirror keeps it.
+	// Unreachable from `grossUp`. Kept to match SPL.
 	if (amount === 0n) return 0n;
-	// 100%: only the cap can be settled.
+	// At 100%, the fee is always `maximumFee`.
 	if (bps === BPS_DIVISOR) {
 		const capped = amount + fee.maximumFee;
 		return capped > U64_MAX ? undefined : capped;
@@ -77,7 +77,8 @@ function preFeeAmount(amount: bigint, fee: MintFee): bigint | undefined {
 	return rawPreFee > U64_MAX ? undefined : rawPreFee;
 }
 
-/** What must be sent for exactly `amount` to land; throws {@link TransferFeeNotSettleableError} if none does. */
+/** Returns the amount to send so that exactly `amount` arrives. Returns `amount` without `fee`.
+ *  Throws {@link TransferFeeNotSettleableError} if no such amount exists. */
 export function grossUp(amount: bigint, fee?: MintFee): bigint {
 	if (fee === undefined) return amount;
 	assertMintFee(fee);
@@ -87,7 +88,7 @@ export function grossUp(amount: bigint, fee?: MintFee): bigint {
 	if (preFee === undefined)
 		throw new TransferFeeNotSettleableError(amount, fee);
 
-	// SPL's inverse is inexact (`feeOn(x) >= inverse(x - feeOn(x))`): re-derive forward and reject a mismatch.
+	// SPL's inverse is inexact (`feeOn(x) >= inverse(x - feeOn(x))`). Check it forward and reject a mismatch.
 	const impliedFee = feeOn(preFee, fee);
 	const gross = amount + impliedFee;
 	if (gross > U64_MAX || feeOn(gross, fee) !== impliedFee) {
@@ -96,8 +97,8 @@ export function grossUp(amount: bigint, fee?: MintFee): bigint {
 	return gross;
 }
 
-/** `baseAmount`/`quoteAmount` are the user's transfers, as in on-chain `TradeResult`. Read the net
- *  fields on {@link BuyQuote}/{@link SellQuote}; re-deriving them drifts from the program by a rounding step. */
+/** `baseAmount` and `quoteAmount` are the user's transfers.
+ *  Read the net amounts from the fields of {@link BuyQuote} and {@link SellQuote}. Do not calculate them again. */
 export interface TradeQuote {
 	/** Base sent: vault to user on a buy, user to vault on a sell. */
 	baseAmount: bigint;
@@ -110,20 +111,20 @@ export interface TradeQuote {
 }
 
 export interface BuyQuote extends TradeQuote {
-	/** Priced on the quote reaching the vault. */
+	/** Priced on the quote that reaches the vault. */
 	fee: bigint;
-	/** Base credited to the buyer, after the base mint's cut. */
+	/** Base the buyer receives, after the base mint's transfer fee. */
 	baseToUser: bigint;
 	/** Equals `quoteAmount`. */
 	quoteFromUser: bigint;
 }
 
 export interface SellQuote extends TradeQuote {
-	/** Priced on the quote leaving the vault. */
+	/** Priced on the AMM's quote output, before this fee. */
 	fee: bigint;
 	/** Equals `baseAmount`. */
 	baseFromUser: bigint;
-	/** Quote credited to the seller, after the quote mint's cut. */
+	/** Quote the seller receives, after the quote mint's transfer fee. */
 	quoteToUser: bigint;
 }
 
@@ -139,7 +140,8 @@ function sqrtBigInt(value: bigint): bigint {
 	return x;
 }
 
-/** Output rounds down (the new reserve rounds up), so `k` never shrinks. */
+/** Returns the constant-product output for `amountIn`, rounded down. Throws `RangeError` on a zero
+ *  reserve, a zero `amountIn`, a zero output, or an output past u64. */
 export function calculateOutput(
 	reserveIn: bigint,
 	reserveOut: bigint,
@@ -169,7 +171,8 @@ export function calculateOutput(
 	return assertU64('calculateOutput', amountOut);
 }
 
-/** Required input rounds up so the user pays enough. */
+/** Returns the input needed for `amountOut`, rounded up. Throws `RangeError` on a zero reserve, a zero
+ *  `amountOut`, an `amountOut` not below `reserveOut`, or an input past u64. */
 export function calculateInputForOutput(
 	reserveIn: bigint,
 	reserveOut: bigint,
@@ -207,7 +210,7 @@ interface BaseQuoteParams {
 	baseFee?: MintFee;
 }
 
-/** Launchpad only: `bondingCurve.realBaseReserves`. A DEX pool has no cap. */
+/** `baseReserveCap` is `bondingCurve.realBaseReserves`. A DEX pool has no cap. */
 interface BaseReserveCap {
 	baseReserveCap?: bigint;
 }
@@ -234,7 +237,7 @@ function ammBuyExactOut(
 		throw new RangeError('buyExactOut: invalid feeBps');
 	}
 
-	// A `feeBps` near 10_000 amplifies the leg up to 10_000x, so this can overflow u64.
+	// A `feeBps` near 10_000 multiplies the leg by up to 10_000, so this can pass u64.
 	const totalQuote = assertU64(
 		'buyExactOut',
 		ceilDiv(quoteBeforeFee * BPS_DIVISOR, divisor),
@@ -251,7 +254,7 @@ function ammBuyExactIn(
 	params: { reserveQuote: bigint; reserveBase: bigint; feeBps: number },
 	quoteAmountIn: bigint,
 ): AmmLegs {
-	// Fee comes off before the swap; the net rounds down, so the fee keeps the remainder.
+	// The fee comes off before the swap. The net rounds down, and the fee takes the remainder.
 	const netFactor = BPS_DIVISOR - BigInt(params.feeBps);
 	if (netFactor <= 0n) {
 		throw new RangeError('buyExactIn: invalid feeBps');
@@ -337,7 +340,9 @@ function buyQuote(
 	};
 }
 
-/** Guard with `calculateSlippageUp(quoteAmount, bps)`; it already carries the quote mint's cut. */
+/** Quotes a buy where the buyer receives `baseAmountOut`. With `baseReserveCap`, the vault sends at
+ *  most the cap. Guard with `calculateSlippageUp(quoteAmount, bps)`. `quoteAmount` includes the quote
+ *  mint's transfer fee. */
 export function buyExactOut(
 	params: BaseQuoteParams & BaseReserveCap & { baseAmountOut: bigint },
 ): BuyQuote {
@@ -352,7 +357,7 @@ export function buyExactOut(
 		cap !== undefined && baseOutOfVault > cap ? cap : baseOutOfVault;
 
 	const legs = ammBuyExactOut(params, baseAmount);
-	// The priced total must land, so the user is debited more than it.
+	// The priced total must reach the vault, so the user sends it grossed up.
 	const quoteFromUser = grossUp(legs.quoteAmount, params.quoteFee);
 
 	return buyQuote(
@@ -362,7 +367,8 @@ export function buyExactOut(
 	);
 }
 
-/** Guard with `calculateSlippageDown(baseToUser, bps)`, not `baseAmount`: the program bounds what the buyer nets. */
+/** Quotes a buy that spends `quoteAmountIn`. Guard with `calculateSlippageDown(baseToUser, bps)`, not
+ *  `baseAmount`. The program checks the minimum against what the buyer receives. */
 export function buyExactIn(
 	params: BaseQuoteParams & BaseReserveCap & { quoteAmountIn: bigint },
 ): BuyQuote {
@@ -371,7 +377,7 @@ export function buyExactIn(
 		throw new RangeError('buyExactIn: invalid amount');
 	}
 
-	// The AMM only ever prices what reaches the vault.
+	// The AMM prices only what reaches the vault.
 	const quoteIntoVault = amountAfterFee(
 		params.quoteAmountIn,
 		params.quoteFee,
@@ -382,7 +388,7 @@ export function buyExactIn(
 
 	const uncapped = ammBuyExactIn(params, quoteIntoVault);
 
-	// Capped: re-price exact-out at the cap and gross up; clamping the base output overstates the quote leg.
+	// Over the cap: price exact-out at the cap, then gross up. Clamping the base output alone overstates the quote leg.
 	const cap = params.baseReserveCap;
 	if (cap === undefined || uncapped.baseAmount <= cap) {
 		return buyQuote(
@@ -402,7 +408,7 @@ export function buyExactIn(
 	);
 }
 
-/** Guard with `calculateSlippageDown(quoteToUser, bps)`, not `quoteAmount`. */
+/** Quotes a sell of `baseAmountIn`. Guard with `calculateSlippageDown(quoteToUser, bps)`, not `quoteAmount`. */
 export function sellExactIn(
 	params: BaseQuoteParams & { baseAmountIn: bigint },
 ): SellQuote {
@@ -417,7 +423,7 @@ export function sellExactIn(
 	}
 
 	const legs = ammSellExactIn(params, baseIntoVault);
-	// `feeOn`, never `grossUp`: the AMM's output leaves the vault as priced.
+	// `feeOn`, not `grossUp`: the AMM's output leaves the vault as priced.
 	const quoteTransferFee = feeOn(legs.quoteAmount, params.quoteFee);
 
 	return {
@@ -431,7 +437,8 @@ export function sellExactIn(
 	};
 }
 
-/** Guard with `calculateSlippageUp(baseFromUser, bps)`, which already carries the base mint's cut. */
+/** Quotes a sell where the seller receives `quoteAmountOut`. Guard with
+ *  `calculateSlippageUp(baseFromUser, bps)`. `baseFromUser` includes the base mint's transfer fee. */
 export function sellExactOut(
 	params: BaseQuoteParams & { quoteAmountOut: bigint },
 ): SellQuote {
@@ -478,7 +485,7 @@ export function calculateSlippageDown(
 	);
 }
 
-/** Floors, as the program's `isqrt` does. */
+/** Returns `sqrt(quoteAmount * baseAmount)`, rounded down. */
 export function calculateInitialLp(
 	quoteAmount: bigint,
 	baseAmount: bigint,
@@ -486,7 +493,7 @@ export function calculateInitialLp(
 	return sqrtBigInt(quoteAmount * baseAmount);
 }
 
-/** Floating-point quote per base, for display only. */
+/** Returns the price of one base token in quote tokens, as a float. For display only. */
 export function calculatePrice(params: {
 	quoteReserves: bigint;
 	baseReserves: bigint;
@@ -499,7 +506,7 @@ export function calculatePrice(params: {
 	return rawRatio * 10 ** (baseDecimals - quoteDecimals);
 }
 
-/** Market cap in raw quote-token units. */
+/** Returns the market cap in raw quote units. */
 export function calculateMarketCap(params: {
 	quoteReserves: bigint;
 	baseReserves: bigint;

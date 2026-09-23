@@ -38,6 +38,7 @@ import {
 	type ReadonlyUint8Array,
 } from '@solana/kit';
 import { SEND_NEXUS_PROGRAM_ADDRESS } from '../programs/index.js';
+import { accountIsCreated } from '../shared/index.js';
 
 export const CREATOR_FEE_CONFIG_DISCRIMINATOR: ReadonlyUint8Array =
 	new Uint8Array([160, 88, 34, 74, 215, 196, 130, 32]);
@@ -110,9 +111,25 @@ export function getCreatorFeeConfigCodec(): FixedSizeCodec<
 	);
 }
 
+/**
+ * Decodes a `CreatorFeeConfig` account, throwing when another program owns it or its discriminator
+ * does not match.
+ *
+ * Unlike {@link fetchMaybeCreatorFeeConfig}, this throws for an address that only holds lamports rather
+ * than returning the non-existing variant: an account passed as existing must never come back as that
+ * variant typed as an `Account`. Apply {@link accountIsCreated} first to accounts fetched another way.
+ */
 export function decodeCreatorFeeConfig<TAddress extends string = string>(
 	encodedAccount: EncodedAccount<TAddress>,
 ): Account<CreatorFeeConfig, TAddress>;
+/**
+ * Decodes a `CreatorFeeConfig` account, throwing when another program owns it or its discriminator
+ * does not match.
+ *
+ * Unlike {@link fetchMaybeCreatorFeeConfig}, this throws for an address that only holds lamports rather
+ * than returning the non-existing variant: an account passed as existing must never come back as that
+ * variant typed as an `Account`. Apply {@link accountIsCreated} first to accounts fetched another way.
+ */
 export function decodeCreatorFeeConfig<TAddress extends string = string>(
 	encodedAccount: MaybeEncodedAccount<TAddress>,
 ): MaybeAccount<CreatorFeeConfig, TAddress>;
@@ -149,6 +166,7 @@ export function decodeCreatorFeeConfig<TAddress extends string = string>(
 	);
 }
 
+/** Fetches a `CreatorFeeConfig` account, throwing when it does not exist or only holds lamports. */
 export async function fetchCreatorFeeConfig<TAddress extends string = string>(
 	rpc: Parameters<typeof fetchEncodedAccount>[0],
 	address: Address<TAddress>,
@@ -159,6 +177,11 @@ export async function fetchCreatorFeeConfig<TAddress extends string = string>(
 	return maybeAccount;
 }
 
+/**
+ * Fetches a `CreatorFeeConfig` account, or the non-existing variant when the address holds no
+ * account or only lamports (see {@link accountIsCreated}).
+ * {@link decodeCreatorFeeConfig} throws for a lamports-only account instead.
+ */
 export async function fetchMaybeCreatorFeeConfig<
 	TAddress extends string = string,
 >(
@@ -167,9 +190,14 @@ export async function fetchMaybeCreatorFeeConfig<
 	config?: FetchAccountConfig,
 ): Promise<MaybeAccount<CreatorFeeConfig, TAddress>> {
 	const maybeAccount = await fetchEncodedAccount(rpc, address, config);
-	return decodeCreatorFeeConfig(maybeAccount);
+	return decodeCreatorFeeConfig(
+		accountIsCreated(maybeAccount)
+			? maybeAccount
+			: { address, exists: false },
+	);
 }
 
+/** Fetches `CreatorFeeConfig` accounts, throwing when any does not exist or only holds lamports. */
 export async function fetchAllCreatorFeeConfig(
 	rpc: Parameters<typeof fetchEncodedAccounts>[0],
 	addresses: Array<Address>,
@@ -184,6 +212,11 @@ export async function fetchAllCreatorFeeConfig(
 	return maybeAccounts;
 }
 
+/**
+ * Fetches `CreatorFeeConfig` accounts, with the non-existing variant for each address that holds
+ * no account or only lamports (see {@link accountIsCreated}).
+ * {@link decodeCreatorFeeConfig} throws for a lamports-only account instead.
+ */
 export async function fetchAllMaybeCreatorFeeConfig(
 	rpc: Parameters<typeof fetchEncodedAccounts>[0],
 	addresses: Array<Address>,
@@ -191,7 +224,11 @@ export async function fetchAllMaybeCreatorFeeConfig(
 ): Promise<MaybeAccount<CreatorFeeConfig>[]> {
 	const maybeAccounts = await fetchEncodedAccounts(rpc, addresses, config);
 	return maybeAccounts.map((maybeAccount) =>
-		decodeCreatorFeeConfig(maybeAccount),
+		decodeCreatorFeeConfig(
+			accountIsCreated(maybeAccount)
+				? maybeAccount
+				: { address: maybeAccount.address, exists: false },
+		),
 	);
 }
 

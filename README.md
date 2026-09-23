@@ -16,21 +16,20 @@ pnpm add @send-fun/sdk @solana/kit
 ```
 
 `@solana/kit` is the only peer dependency: 6.x from 6.10.0, 7.x or 8.x. The SDK
-uses the `@solana/program-client-core` that your kit release ships, through
-`@solana/kit/program-client-core`, so do not install that package separately
-for it.
+imports `@solana/program-client-core` through `@solana/kit/program-client-core`.
+Do not install `@solana/program-client-core` for the SDK.
 
 That subpath needs `package.json` `exports` support: TypeScript
-`moduleResolution` set to `node16`, `nodenext` or `bundler` (not `node10`), and
-Metro 0.82 or later on React Native.
+`moduleResolution` set to `node16`, `nodenext` or `bundler`, and Metro 0.82 or
+later on React Native.
 
 ## Rules
 
-- Read `platformConfig` from the bonding curve or the pool. Do not use your own
-  platform key.
+- To trade, read `platformConfig` from the bonding curve or the pool.
+- To create a token, get your platform key with
+  `platform.findPlatformAddress(slug)`.
 - A partner other than `constants.DEFAULT_PARTNER` must sign.
-- Get a platform key with `platform.findPlatformAddress(slug)`.
-- Do not edit the `generated` modules. They come from the program IDLs.
+- The `generated` modules come from the program IDLs. Do not edit them.
 
 ## Documentation
 

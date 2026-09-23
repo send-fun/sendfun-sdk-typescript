@@ -19,7 +19,7 @@ export interface LaunchpadTradeParams {
 	partner: PartnerInput;
 	platformConfig: Address;
 	quoteTokenProgram: Address;
-	/** Token-2022 schedule for the epoch the trade lands in; stale or missing skews the slippage bounds. */
+	/** The quote mint's transfer fee for the epoch the trade lands in. A missing or old fee gives wrong slippage bounds. */
 	quoteFee?: MintFee;
 	baseFee?: MintFee;
 	/** {@inheritDoc LaunchpadInstructionParams.userQuoteAccount} */
@@ -40,16 +40,16 @@ export interface LaunchpadInstructionParams {
 	partner: PartnerInput;
 	platformConfig: Address;
 	quoteTokenProgram: Address;
-	/** Any user-owned quote-mint account. Defaults to the ATA, created mid-trade
-	 *  if missing (payer funds rent), which only rescues a sell. For WSOL,
-	 *  a throwaway `createAccountWithSeed` account is cheaper. */
+	/** Any quote-mint token account that `user` owns. Defaults to the user's ATA.
+	 *  The program creates a missing ATA, and `payer` pays the rent. */
 	userQuoteAccount?: Address;
-	/** Any user-owned base-mint account. Defaults to the ATA, created mid-trade
-	 *  if missing (payer funds rent), which only rescues a buy. */
+	/** Any base-mint token account that `user` owns. Defaults to the user's ATA.
+	 *  The program creates a missing ATA, and `payer` pays the rent. */
 	userBaseAccount?: Address;
 }
 
-/** `baseAmountOut` is net to the buyer: the program reads `amount` as `base_to_user`. */
+/** `baseAmountOut` is the base the buyer receives, after the base mint's transfer fee.
+ *  The buy is capped at the curve's supply left. Read the result from `quote.baseToUser`. */
 export async function buyExactOut(
 	params: LaunchpadBuyParams & { baseAmountOut: bigint },
 ): Promise<{ instruction: Instruction; quote: BuyQuote }> {
@@ -62,7 +62,7 @@ export async function buyExactOut(
 		baseFee: params.baseFee,
 		baseReserveCap: params.realBaseReserves,
 	});
-	// The cap is measured on the gross the buyer sends, quote transfer fee included.
+	// The program checks `maxAmountIn` against the gross the buyer sends, quote transfer fee included.
 	const maxQuoteIn = amm.calculateSlippageUp(
 		quote.quoteFromUser,
 		params.slippageBps,
@@ -70,7 +70,7 @@ export async function buyExactOut(
 	return {
 		instruction: await buildBuyExactOutInstruction({
 			...params,
-			// Capped at the supply left. The program reverts a short fill.
+			// Capped at the supply left. The program rejects a larger amount.
 			amountOut: quote.baseToUser,
 			maxAmountIn: maxQuoteIn,
 		}),
@@ -90,7 +90,7 @@ export async function buyExactIn(
 		baseFee: params.baseFee,
 		baseReserveCap: params.realBaseReserves,
 	});
-	// The floor is measured on the buyer's credit, not the vault's debit.
+	// The program checks `minAmountOut` against what the buyer receives, not the vault's debit.
 	const minBaseOut = amm.calculateSlippageDown(
 		quote.baseToUser,
 		params.slippageBps,
@@ -116,7 +116,7 @@ export async function sellExactIn(
 		quoteFee: params.quoteFee,
 		baseFee: params.baseFee,
 	});
-	// The floor is measured on the seller's credit, not what leaves the vault.
+	// The program checks `minAmountOut` against what the seller receives, not the vault's debit.
 	const minQuoteOut = amm.calculateSlippageDown(
 		quote.quoteToUser,
 		params.slippageBps,
@@ -131,7 +131,7 @@ export async function sellExactIn(
 	};
 }
 
-/** `quoteAmountOut` is net to the seller: the program reads `amount` as `quote_to_user`. */
+/** `quoteAmountOut` is the quote the seller receives, after the quote mint's transfer fee. */
 export async function sellExactOut(
 	params: LaunchpadTradeParams & { quoteAmountOut: bigint },
 ): Promise<{ instruction: Instruction; quote: SellQuote }> {
@@ -143,7 +143,7 @@ export async function sellExactOut(
 		quoteFee: params.quoteFee,
 		baseFee: params.baseFee,
 	});
-	// The cap is measured on the gross the seller sends, base transfer fee included.
+	// The program checks `maxAmountIn` against the gross the seller sends, base transfer fee included.
 	const maxBaseIn = amm.calculateSlippageUp(
 		quote.baseFromUser,
 		params.slippageBps,
@@ -214,7 +214,7 @@ export async function buildSellExactOutInstruction(
 	});
 }
 
-/** Percent of the curve's real base sold (0-100); 100 is the migration threshold. */
+/** Returns the percent of the curve's real base sold, from 0 to 100. At 100 the curve can migrate. */
 export function calculateBondingCurveProgress(params: {
 	realBaseReserves: bigint;
 	initialRealBase: bigint;
@@ -237,7 +237,7 @@ function resolveSharedAccounts(params: LaunchpadInstructionParams) {
 		partner: params.partner,
 		platformConfig: params.platformConfig,
 		quoteTokenProgram: params.quoteTokenProgram,
-		// Left undefined so the generated client derives the ATA itself.
+		// When omitted, the generated client derives the ATA.
 		...(params.userQuoteAccount !== undefined && {
 			userQuoteAccount: params.userQuoteAccount,
 		}),

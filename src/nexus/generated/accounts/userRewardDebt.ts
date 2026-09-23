@@ -44,6 +44,7 @@ import {
 	type ReadonlyUint8Array,
 } from '@solana/kit';
 import { SEND_NEXUS_PROGRAM_ADDRESS } from '../programs/index.js';
+import { accountIsCreated } from '../shared/index.js';
 
 export const USER_REWARD_DEBT_DISCRIMINATOR: ReadonlyUint8Array =
 	new Uint8Array([92, 166, 184, 23, 127, 201, 251, 148]);
@@ -133,9 +134,25 @@ export function getUserRewardDebtCodec(): FixedSizeCodec<
 	return combineCodec(getUserRewardDebtEncoder(), getUserRewardDebtDecoder());
 }
 
+/**
+ * Decodes a `UserRewardDebt` account, throwing when another program owns it or its discriminator
+ * does not match.
+ *
+ * Unlike {@link fetchMaybeUserRewardDebt}, this throws for an address that only holds lamports rather
+ * than returning the non-existing variant: an account passed as existing must never come back as that
+ * variant typed as an `Account`. Apply {@link accountIsCreated} first to accounts fetched another way.
+ */
 export function decodeUserRewardDebt<TAddress extends string = string>(
 	encodedAccount: EncodedAccount<TAddress>,
 ): Account<UserRewardDebt, TAddress>;
+/**
+ * Decodes a `UserRewardDebt` account, throwing when another program owns it or its discriminator
+ * does not match.
+ *
+ * Unlike {@link fetchMaybeUserRewardDebt}, this throws for an address that only holds lamports rather
+ * than returning the non-existing variant: an account passed as existing must never come back as that
+ * variant typed as an `Account`. Apply {@link accountIsCreated} first to accounts fetched another way.
+ */
 export function decodeUserRewardDebt<TAddress extends string = string>(
 	encodedAccount: MaybeEncodedAccount<TAddress>,
 ): MaybeAccount<UserRewardDebt, TAddress>;
@@ -170,6 +187,7 @@ export function decodeUserRewardDebt<TAddress extends string = string>(
 	);
 }
 
+/** Fetches a `UserRewardDebt` account, throwing when it does not exist or only holds lamports. */
 export async function fetchUserRewardDebt<TAddress extends string = string>(
 	rpc: Parameters<typeof fetchEncodedAccount>[0],
 	address: Address<TAddress>,
@@ -180,6 +198,11 @@ export async function fetchUserRewardDebt<TAddress extends string = string>(
 	return maybeAccount;
 }
 
+/**
+ * Fetches a `UserRewardDebt` account, or the non-existing variant when the address holds no
+ * account or only lamports (see {@link accountIsCreated}).
+ * {@link decodeUserRewardDebt} throws for a lamports-only account instead.
+ */
 export async function fetchMaybeUserRewardDebt<
 	TAddress extends string = string,
 >(
@@ -188,9 +211,14 @@ export async function fetchMaybeUserRewardDebt<
 	config?: FetchAccountConfig,
 ): Promise<MaybeAccount<UserRewardDebt, TAddress>> {
 	const maybeAccount = await fetchEncodedAccount(rpc, address, config);
-	return decodeUserRewardDebt(maybeAccount);
+	return decodeUserRewardDebt(
+		accountIsCreated(maybeAccount)
+			? maybeAccount
+			: { address, exists: false },
+	);
 }
 
+/** Fetches `UserRewardDebt` accounts, throwing when any does not exist or only holds lamports. */
 export async function fetchAllUserRewardDebt(
 	rpc: Parameters<typeof fetchEncodedAccounts>[0],
 	addresses: Array<Address>,
@@ -205,6 +233,11 @@ export async function fetchAllUserRewardDebt(
 	return maybeAccounts;
 }
 
+/**
+ * Fetches `UserRewardDebt` accounts, with the non-existing variant for each address that holds
+ * no account or only lamports (see {@link accountIsCreated}).
+ * {@link decodeUserRewardDebt} throws for a lamports-only account instead.
+ */
 export async function fetchAllMaybeUserRewardDebt(
 	rpc: Parameters<typeof fetchEncodedAccounts>[0],
 	addresses: Array<Address>,
@@ -212,7 +245,11 @@ export async function fetchAllMaybeUserRewardDebt(
 ): Promise<MaybeAccount<UserRewardDebt>[]> {
 	const maybeAccounts = await fetchEncodedAccounts(rpc, addresses, config);
 	return maybeAccounts.map((maybeAccount) =>
-		decodeUserRewardDebt(maybeAccount),
+		decodeUserRewardDebt(
+			accountIsCreated(maybeAccount)
+				? maybeAccount
+				: { address: maybeAccount.address, exists: false },
+		),
 	);
 }
 

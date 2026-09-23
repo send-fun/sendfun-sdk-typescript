@@ -2,7 +2,7 @@ export function floorDiv(a: bigint, b: bigint): bigint {
 	return a / b;
 }
 
-// Assumes non-negative inputs.
+// Inputs must be non-negative.
 export function ceilDiv(a: bigint, b: bigint): bigint {
 	return a / b + (a % b > 0n ? 1n : 0n);
 }

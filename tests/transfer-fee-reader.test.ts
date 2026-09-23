@@ -22,14 +22,13 @@ import {
 
 const U64_MAX = 18_446_744_073_709_551_615n;
 
-// Mainnet `TKLSidmLVt3cqGaaodG8tyRzoANfQwoh67AccjmubeZ`, copied from
-// tests/typescript/shared/mainnet-quote-mints.ts: this package must not import the
-// repo test tree. TLV: `TransferFeeConfig`, `MetadataPointer`, `TokenMetadata`.
+// Mainnet `TKLSidmLVt3cqGaaodG8tyRzoANfQwoh67AccjmubeZ`.
+// TLV: `TransferFeeConfig`, `MetadataPointer`, `TokenMetadata`.
 const TKALSHI_ACCOUNT =
 	'AQAAAMkTzlIGLjVmlB0IsJQauejYr2X5R0n7FM50wPVcXvw7M7Fmv2oBAAAJAQEAAABkrtMna2+B2Qf13mxMlFRLHvbUBPzL//nfKbcA1Sg0uAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQEAbADJE85SBi41ZpQdCLCUGrno2K9l+UdJ+xTOdMD1XF78O0EX1CifzNXEbLWz9Jch2yG+N/0T8DipXQ1EMUGZjMh8v/QMAAAAAACaAwAAAAAAAP//////////FACaAwAAAAAAAP//////////FAASAEAAyRPOUgYuNWaUHQiwlBq56NivZflHSfsUznTA9Vxe/DsGvdUu+NR5pa3zhYIBetNbB8LCG6NMPaeuCKn9wNEFqhMAjgDJE85SBi41ZpQdCLCUGrno2K9l+UdJ+xTOdMD1XF78Owa91S741HmlrfOFggF601sHwsIbo0w9p64Iqf3A0QWqCAAAAFQtS2Fsc2hpBwAAAHRLYWxzaGkvAAAAaHR0cHM6Ly9jZG4udGVzc2VyYWxhYi5jby90ZXNzZXJhL3Qta2Fsc2hpLmpzb24AAAAA';
 
-// Mainnet `XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp`, same source: eight
-// extensions, none of them `TransferFeeConfig`.
+// Mainnet `XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp`. It has extensions, but
+// no `TransferFeeConfig`.
 const AAPLX_ACCOUNT =
 	'AQAAAGVqQkIv6okUBqQZ0dHeCPQqhHlBtaGulevOYZrDFyk0sFT4HvwNAAAIAQEAAAD/3+wbzSzTg5PITaoIyRzA041nf/jQq3tdAz8A9zLMMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARIAQABD+fHuLje4B+pFy3TmAJcivsAJKWAm5ORVi0NeJKXpxgfooHtWzpJmuZKqX9ZEXDx3mLLrtzM8Hn7eBixrhgflDAAgAEP58e4uN7gH6kXLdOYAlyK+wAkpYCbk5FWLQ14kpenGBgABAAEZADgABm9ZIlHMR3R4JaWa0UIupDVz9SjaXe4q94ErMU+ZReNQdcef6QrwP4h4dmoAAAAABS7fzmMN8D8aACEA/9/sG80s04OTyE2qCMkcwNONZ3/40Kt7XQM/APcyzDAABABBAEP58e4uN7gH6kXLdOYAlyK+wAkpYCbk5FWLQ14kpenGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADgBAAEP58e4uN7gH6kXLdOYAlyK+wAkpYCbk5FWLQ14kpenGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATAKUAQ/nx7i43uAfqRct05gCXIr7ACSlgJuTkVYtDXiSl6cYH6KB7Vs6SZrmSql/WRFw8d5iy67czPB5+3gYsa4YH5QwAAABBcHBsZSB4U3RvY2sFAAAAQUFQTHhEAAAAaHR0cHM6Ly94c3RvY2tzLW1ldGFkYXRhLmJhY2tlZC5maS90b2tlbnMvU29sYW5hL0FBUEx4L21ldGFkYXRhLmpzb24AAAAA';
 
@@ -75,7 +74,7 @@ function transferFeeConfigEntry(length: number): number[] {
 	return [1, 0, length & 0xff, length >> 8, ...zeros(length)];
 }
 
-// Entries differ in rate AND cap, so picking the wrong one fails on either field.
+// The entries differ in rate and in cap, so a wrong pick fails on both fields.
 const TWO_ENTRY_SCHEDULE: TransferFeeConfig = {
 	authority: undefined,
 	older: { epoch: 5n, maximumFee: 1_000n, basisPoints: 100 },
@@ -128,7 +127,7 @@ describe('decodeTransferFeeConfig', () => {
 	});
 
 	it('stops at a zero tail too short for a header, as SPL reads it', () => {
-		// Extensions totalling `Multisig::LEN` are allocated two bytes past it.
+		// Token-2022 allocates extensions that total `Multisig::LEN` two bytes longer.
 		for (const tail of [1, 2, 3]) {
 			assert.equal(
 				decodeTransferFeeConfig(
@@ -274,7 +273,7 @@ describe('decodeTransferFeeConfig', () => {
 	});
 });
 
-// Kit's decoder as a test-only oracle: the SDK takes no runtime dependency on it.
+// `@solana-program/token-2022` is a test oracle only. The SDK does not depend on it.
 const UNSET_AUTHORITY = address('11111111111111111111111111111111');
 
 const METADATA_POINTER = [18, 0, 64, 0, ...zeros(64)];
@@ -343,9 +342,9 @@ describe('decodeTransferFeeConfig agrees with @solana-program/token-2022', () =>
 		assertAgreesWithKit(accountBytes(AAPLX_ACCOUNT), false, 'AAPLx');
 	});
 
-	// Token-2022 pads by two bytes past `Multisig::LEN`, so tails are even. Kit's
-	// decoder before 0.17.0, the one a kit 6 install gets, throws on an odd one
-	// that SPL reads as the end of the list.
+	// Token-2022 pads two bytes past `Multisig::LEN`, so its tails are even.
+	// `@solana-program/token-2022` before 0.17.0 throws on an odd tail that SPL
+	// reads as the end of the list.
 	it('with the fee config anywhere, or absent, at every tail Token-2022 writes', () => {
 		const shapes = [
 			['fee config only', scheduleEntry(), true],

@@ -8,7 +8,7 @@ test('the documented sendfun platform key matches its derivation', async () => {
 	assert.equal(bump, 255);
 });
 
-// No registry allocates platforms; distinct slugs are all that keep two apart.
+// No registry allocates platforms. Only the slug separates two platforms.
 test('distinct slugs derive distinct platform keys', async () => {
 	const [sendfun] = await findPlatformAddress('sendfun');
 	const [acme] = await findPlatformAddress('acme');

@@ -19,7 +19,7 @@ export interface DexTradeParams {
 	partner: PartnerInput;
 	platformConfig: Address;
 	quoteTokenProgram: Address;
-	/** Token-2022 schedule for the epoch the trade lands in; stale or missing skews the slippage bounds. */
+	/** The quote mint's transfer fee for the epoch the trade lands in. A missing or old fee gives wrong slippage bounds. */
 	quoteFee?: MintFee;
 	baseFee?: MintFee;
 	/** {@inheritDoc DexInstructionParams.userQuoteAccount} */
@@ -36,16 +36,15 @@ export interface DexInstructionParams {
 	partner: PartnerInput;
 	platformConfig: Address;
 	quoteTokenProgram: Address;
-	/** Any user-owned quote-mint account. Defaults to the ATA, created mid-trade
-	 *  if missing (payer funds rent), which only rescues a sell. For WSOL,
-	 *  a throwaway `createAccountWithSeed` account is cheaper. */
+	/** Any quote-mint token account that `user` owns. Defaults to the user's ATA.
+	 *  The program creates a missing ATA, and `payer` pays the rent. */
 	userQuoteAccount?: Address;
-	/** Any user-owned base-mint account. Defaults to the ATA, created mid-trade
-	 *  if missing (payer funds rent), which only rescues a buy. */
+	/** Any base-mint token account that `user` owns. Defaults to the user's ATA.
+	 *  The program creates a missing ATA, and `payer` pays the rent. */
 	userBaseAccount?: Address;
 }
 
-/** `baseAmountOut` is net to the buyer: the program reads `amount` as `base_to_user`. */
+/** `baseAmountOut` is the base the buyer receives, after the base mint's transfer fee. */
 export async function buyExactOut(
 	params: DexTradeParams & { baseAmountOut: bigint },
 ): Promise<{ instruction: Instruction; quote: BuyQuote }> {
@@ -57,7 +56,7 @@ export async function buyExactOut(
 		quoteFee: params.quoteFee,
 		baseFee: params.baseFee,
 	});
-	// The cap is measured on the gross the buyer sends, quote transfer fee included.
+	// The program checks `maxAmountIn` against the gross the buyer sends, quote transfer fee included.
 	const maxQuoteIn = amm.calculateSlippageUp(
 		quote.quoteFromUser,
 		params.slippageBps,
@@ -83,7 +82,7 @@ export async function buyExactIn(
 		quoteFee: params.quoteFee,
 		baseFee: params.baseFee,
 	});
-	// The floor is measured on the buyer's credit, not the vault's debit.
+	// The program checks `minAmountOut` against what the buyer receives, not the vault's debit.
 	const minBaseOut = amm.calculateSlippageDown(
 		quote.baseToUser,
 		params.slippageBps,
@@ -109,7 +108,7 @@ export async function sellExactIn(
 		quoteFee: params.quoteFee,
 		baseFee: params.baseFee,
 	});
-	// The floor is measured on the seller's credit, not what leaves the vault.
+	// The program checks `minAmountOut` against what the seller receives, not the vault's debit.
 	const minQuoteOut = amm.calculateSlippageDown(
 		quote.quoteToUser,
 		params.slippageBps,
@@ -124,7 +123,7 @@ export async function sellExactIn(
 	};
 }
 
-/** `quoteAmountOut` is net to the seller: the program reads `amount` as `quote_to_user`. */
+/** `quoteAmountOut` is the quote the seller receives, after the quote mint's transfer fee. */
 export async function sellExactOut(
 	params: DexTradeParams & { quoteAmountOut: bigint },
 ): Promise<{ instruction: Instruction; quote: SellQuote }> {
@@ -136,7 +135,7 @@ export async function sellExactOut(
 		quoteFee: params.quoteFee,
 		baseFee: params.baseFee,
 	});
-	// The cap is measured on the gross the seller sends, base transfer fee included.
+	// The program checks `maxAmountIn` against the gross the seller sends, base transfer fee included.
 	const maxBaseIn = amm.calculateSlippageUp(
 		quote.baseFromUser,
 		params.slippageBps,
@@ -204,7 +203,7 @@ function resolveSharedAccounts(params: DexInstructionParams) {
 		partner: params.partner,
 		platformConfig: params.platformConfig,
 		quoteTokenProgram: params.quoteTokenProgram,
-		// Left undefined so the generated client derives the ATA itself.
+		// When omitted, the generated client derives the ATA.
 		...(params.userQuoteAccount !== undefined && {
 			userQuoteAccount: params.userQuoteAccount,
 		}),

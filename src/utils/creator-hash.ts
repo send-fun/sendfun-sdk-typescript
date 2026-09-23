@@ -3,7 +3,8 @@ import type { Address, ReadonlyUint8Array } from '@solana/kit';
 
 const MAX_CREATOR_PLATFORM_LEN = 32;
 
-/** SHA-256 of the LE-u32-length-prefixed platform and id. Frozen: it seeds live PDAs. */
+/** Returns the SHA-256 of `creatorPlatform` and `creatorId`, each prefixed with its byte length as a
+ *  little-endian u32. Throws `RangeError` if `creatorPlatform` is more than 32 bytes. */
 export async function creatorHashFromId(
 	creatorPlatform: string,
 	creatorId: string,
@@ -34,7 +35,8 @@ export async function creatorHashFromId(
 	return addressDecoder.decode(hash);
 }
 
-/** NUL-pads `text` to `length` bytes, the on-chain `CreatorFeeConfig.platformId` form; throws RangeError if longer. */
+/** Pads `text` with NUL bytes to `length` bytes, the form of `CreatorFeeConfig.platformId`.
+ *  Throws `RangeError` if `text` is longer. */
 export function encodeCreatorId(text: string, length: number): Uint8Array {
 	const bytes = new TextEncoder().encode(text);
 	if (bytes.length > length) {
@@ -47,7 +49,8 @@ export function encodeCreatorId(text: string, length: number): Uint8Array {
 	return out;
 }
 
-/** Strips NUL padding. Pass this, never the padded array, to {@link creatorHashFromId}: the hash is length-prefixed. */
+/** Removes the trailing NUL bytes and decodes the rest as UTF-8. Pass the result, not the padded
+ *  bytes, to {@link creatorHashFromId}. */
 export function decodeCreatorId(bytes: ReadonlyUint8Array): string {
 	let end = bytes.length;
 	while (end > 0 && bytes[end - 1] === 0) {

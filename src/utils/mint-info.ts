@@ -1,5 +1,4 @@
-// Read off the mint, never tabulated: a stale `tokenProgram` derives an ATA the
-// transfer cannot reach.
+// Reads the token program from the mint account. Do not hard-code it.
 import {
 	getBase64Encoder,
 	type Address,
@@ -15,14 +14,14 @@ import {
 } from '../constants.js';
 import { fetchInChunks } from './chunk.js';
 
-// Both token programs share the base mint: 36-byte `COption<Pubkey>` authority,
+// Both token programs use the same base mint: 36-byte `COption<Pubkey>` authority,
 // u64 supply, then decimals.
 const MINT_BASE_LENGTH = 82;
 const MINT_DECIMALS_OFFSET = 44;
 
 export interface QuoteMintInfo {
 	mint: Address;
-	/** Immutable: safe to cache. */
+	/** Cannot change after the mint is created. */
 	decimals: number;
 	/** The account's owner: `TOKEN_PROGRAM_ADDRESS` or `TOKEN_2022_PROGRAM_ADDRESS`. */
 	tokenProgram: Address;
@@ -41,7 +40,7 @@ function decodeMintInfo(
 			`fetchQuoteMintInfo: ${mint} is owned by ${owner}, which is not a token program`,
 		);
 	}
-	// A floor, not an equality: Token-2022 mints with extensions run longer.
+	// A minimum: Token-2022 mints with extensions are longer.
 	if (data.length < MINT_BASE_LENGTH) {
 		throw new Error(
 			`fetchQuoteMintInfo: ${mint} holds ${data.length} bytes, too short for a mint`,
@@ -50,7 +49,8 @@ function decodeMintInfo(
 	return { mint, decimals: data[MINT_DECIMALS_OFFSET], tokenProgram: owner };
 }
 
-/** Throws when the mint does not exist or is not owned by a token program. */
+/** Reads the decimals and token program of `mint`. Throws if the account does not exist, a token
+ *  program does not own it, or it is too short for a mint. */
 export async function fetchQuoteMintInfo(
 	rpc: Rpc<GetAccountInfoApi>,
 	mint: Address,
@@ -71,7 +71,8 @@ export async function fetchQuoteMintInfo(
 	return decodeMintInfo(mint, data, value.owner);
 }
 
-/** One round trip per 100 mints; results follow `mints` order. */
+/** Reads the decimals and token program of each mint. Results follow `mints` order. Throws as
+ *  {@link fetchQuoteMintInfo} does. */
 export async function fetchQuoteMintInfos(
 	rpc: Rpc<GetMultipleAccountsApi>,
 	mints: readonly Address[],

@@ -10,11 +10,13 @@ export interface FeeSplit {
 	protocol: bigint;
 	lp: bigint;
 	creator: bigint;
-	/** Decay share already included in `protocol`, not a separate payout. */
+	/** The decay premium share. `protocol` includes it. It is not a separate payout. */
 	sniper: bigint;
 }
 
-/** LP/creator round down; protocol absorbs the decay premium and all remainders. */
+/** Splits `feeAmount` into protocol, LP and creator shares. LP and creator round down. Protocol gets
+ *  the decay premium and all remainders. Throws `RangeError` on a negative or non-integer input,
+ *  a zero total bps, or `protocolBps + lpBps` above `baseTotalBps`. */
 export function splitFeeAmount(args: FeeSplitArgs): FeeSplit {
 	const { feeAmount } = args;
 	const protocolBps = toBps(args.protocolBps, 'protocolBps');

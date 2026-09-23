@@ -1,6 +1,7 @@
 import { ceilDiv } from './internal.js';
 
-/** Premium in bps, rounded up. */
+/** Returns the fee decay premium in bps, rounded up. The premium falls quadratically from
+ *  `decayStartBps - standardFeeBps` at creation to 0 after `decaySeconds`. */
 export function calculateFeeDecayPremium(params: {
 	currentTimestamp: bigint;
 	createdAtTimestamp: bigint;
@@ -23,7 +24,7 @@ export function calculateFeeDecayPremium(params: {
 	const standardBps = BigInt(standardFeeBps);
 	const decaySecondsBig = BigInt(decaySeconds);
 
-	// Future creation timestamps pay the full premium, not a discount.
+	// A creation time in the future pays the full premium.
 	if (createdAtTimestamp > currentTimestamp) {
 		if (startBps <= standardBps) return 0n;
 		return startBps - standardBps;

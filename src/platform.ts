@@ -2,10 +2,10 @@ import { getProgramDerivedAddress } from '@solana/kit';
 import type { ProgramDerivedAddress } from '@solana/kit';
 import { SEND_NEXUS_PROGRAM_ADDRESS } from './nexus/generated/programs/index.js';
 
-/** A platform is only a key, with no on-chain account; it is a PDA so a platform account can later `init` at it. */
+/** Seed of the platform PDA. A platform has no on-chain account. */
 export const PLATFORM_SEED = 'platform';
 
-/** The name is the platform's identity: renaming one orphans every market and partner config under the old key. */
+/** Derives the platform key for `name` under the nexus program. Each name gives a different platform. */
 export async function findPlatformAddress(
 	name: string,
 ): Promise<ProgramDerivedAddress> {
