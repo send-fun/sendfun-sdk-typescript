@@ -22,6 +22,8 @@ import {
 	getBytesEncoder,
 	getStructDecoder,
 	getStructEncoder,
+	getU16Decoder,
+	getU16Encoder,
 	getU8Decoder,
 	getU8Encoder,
 	transformEncoder,
@@ -70,6 +72,7 @@ export type PartnerConfig = {
 	launchpad: LaunchpadFees;
 	dex: DexFees;
 	platformConfig: Address;
+	allowedCreatorFeeModes: number;
 	reserved: ReadonlyUint8Array;
 };
 
@@ -82,6 +85,7 @@ export type PartnerConfigArgs = {
 	launchpad: LaunchpadFeesArgs;
 	dex: DexFeesArgs;
 	platformConfig: Address;
+	allowedCreatorFeeModes: number;
 	reserved: ReadonlyUint8Array;
 };
 
@@ -98,7 +102,8 @@ export function getPartnerConfigEncoder(): FixedSizeEncoder<PartnerConfigArgs> {
 			['launchpad', getLaunchpadFeesEncoder()],
 			['dex', getDexFeesEncoder()],
 			['platformConfig', getAddressEncoder()],
-			['reserved', fixEncoderSize(getBytesEncoder(), 32)],
+			['allowedCreatorFeeModes', getU16Encoder()],
+			['reserved', fixEncoderSize(getBytesEncoder(), 256)],
 		]),
 		(value) => ({ ...value, discriminator: PARTNER_CONFIG_DISCRIMINATOR }),
 	);
@@ -116,7 +121,8 @@ export function getPartnerConfigDecoder(): FixedSizeDecoder<PartnerConfig> {
 		['launchpad', getLaunchpadFeesDecoder()],
 		['dex', getDexFeesDecoder()],
 		['platformConfig', getAddressDecoder()],
-		['reserved', fixDecoderSize(getBytesDecoder(), 32)],
+		['allowedCreatorFeeModes', getU16Decoder()],
+		['reserved', fixDecoderSize(getBytesDecoder(), 256)],
 	]);
 }
 
@@ -242,5 +248,5 @@ export async function fetchAllMaybePartnerConfig(
 }
 
 export function getPartnerConfigSize(): number {
-	return 173;
+	return 399;
 }

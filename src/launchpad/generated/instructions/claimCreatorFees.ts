@@ -45,6 +45,7 @@ import {
 import {
 	EVENT_AUTHORITY_PDA_ADDRESS,
 	findBondingCurvePda,
+	findCreatorFeeConfigPda,
 } from '../pdas/index.js';
 import { SEND_LAUNCHPAD_PROGRAM_ADDRESS } from '../programs/index.js';
 
@@ -96,7 +97,7 @@ export type ClaimCreatorFeesInstruction<
 				? WritableAccount<TAccountBondingCurve>
 				: TAccountBondingCurve,
 			TAccountCreatorFeeConfig extends string
-				? ReadonlyAccount<TAccountCreatorFeeConfig>
+				? WritableAccount<TAccountCreatorFeeConfig>
 				: TAccountCreatorFeeConfig,
 			TAccountNexusGlobalConfig extends string
 				? ReadonlyAccount<TAccountNexusGlobalConfig>
@@ -184,7 +185,7 @@ export type ClaimCreatorFeesAsyncInput<
 	claimer: TransactionSigner<TAccountClaimer>;
 	payer: TransactionSigner<TAccountPayer>;
 	bondingCurve?: Address<TAccountBondingCurve>;
-	creatorFeeConfig: Address<TAccountCreatorFeeConfig>;
+	creatorFeeConfig?: Address<TAccountCreatorFeeConfig>;
 	baseMint: Address<TAccountBaseMint>;
 	quoteMint: Address<TAccountQuoteMint>;
 	quoteVault?: Address<TAccountQuoteVault>;
@@ -247,7 +248,7 @@ export async function getClaimCreatorFeesInstructionAsync<
 		bondingCurve: { value: input.bondingCurve ?? null, isWritable: true },
 		creatorFeeConfig: {
 			value: input.creatorFeeConfig ?? null,
-			isWritable: false,
+			isWritable: true,
 		},
 		nexusGlobalConfig: { value: null, isWritable: false },
 		baseMint: { value: input.baseMint ?? null, isWritable: false },
@@ -275,6 +276,18 @@ export async function getClaimCreatorFeesInstructionAsync<
 	// Resolve default values.
 	if (!accounts.bondingCurve.value) {
 		accounts.bondingCurve.value = await findBondingCurvePda({
+			baseMint: getAddressFromResolvedInstructionAccount(
+				'baseMint',
+				accounts.baseMint.value,
+			),
+			quoteMint: getAddressFromResolvedInstructionAccount(
+				'quoteMint',
+				accounts.quoteMint.value,
+			),
+		});
+	}
+	if (!accounts.creatorFeeConfig.value) {
+		accounts.creatorFeeConfig.value = await findCreatorFeeConfigPda({
 			baseMint: getAddressFromResolvedInstructionAccount(
 				'baseMint',
 				accounts.baseMint.value,
@@ -477,7 +490,7 @@ export function getClaimCreatorFeesInstruction<
 		bondingCurve: { value: input.bondingCurve ?? null, isWritable: true },
 		creatorFeeConfig: {
 			value: input.creatorFeeConfig ?? null,
-			isWritable: false,
+			isWritable: true,
 		},
 		nexusGlobalConfig: { value: null, isWritable: false },
 		baseMint: { value: input.baseMint ?? null, isWritable: false },

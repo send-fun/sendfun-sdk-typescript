@@ -76,6 +76,7 @@ import {
 } from '../instructions/index.js';
 import {
 	findBondingCurvePda,
+	findCreatorFeeConfigPda,
 	findEventAuthorityPda,
 	findGlobalConfigPda,
 	findMigrationAuthorityPda,
@@ -150,6 +151,7 @@ export type SendLaunchpadPluginInstructions = {
 export type SendLaunchpadPluginPdas = {
 	bondingCurve: typeof findBondingCurvePda;
 	eventAuthority: typeof findEventAuthorityPda;
+	creatorFeeConfig: typeof findCreatorFeeConfigPda;
 	rewardAccrual: typeof findRewardAccrualPda;
 	globalConfig: typeof findGlobalConfigPda;
 	wsolRewardAccrual: typeof findWsolRewardAccrualPda;
@@ -299,6 +301,7 @@ export function sendLaunchpadProgram() {
 				pdas: {
 					bondingCurve: findBondingCurvePda,
 					eventAuthority: findEventAuthorityPda,
+					creatorFeeConfig: findCreatorFeeConfigPda,
 					rewardAccrual: findRewardAccrualPda,
 					globalConfig: findGlobalConfigPda,
 					wsolRewardAccrual: findWsolRewardAccrualPda,

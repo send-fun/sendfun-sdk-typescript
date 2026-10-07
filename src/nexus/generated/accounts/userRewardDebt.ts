@@ -99,7 +99,7 @@ export function getUserRewardDebtEncoder(): FixedSizeEncoder<UserRewardDebtArgs>
 			['amountSnapshot', getU64Encoder()],
 			['settledVersion', getU32Encoder()],
 			['owed', getU64Encoder()],
-			['reserved', fixEncoderSize(getBytesEncoder(), 32)],
+			['reserved', fixEncoderSize(getBytesEncoder(), 64)],
 		]),
 		(value) => ({
 			...value,
@@ -122,7 +122,7 @@ export function getUserRewardDebtDecoder(): FixedSizeDecoder<UserRewardDebt> {
 		['amountSnapshot', getU64Decoder()],
 		['settledVersion', getU32Decoder()],
 		['owed', getU64Decoder()],
-		['reserved', fixDecoderSize(getBytesDecoder(), 32)],
+		['reserved', fixDecoderSize(getBytesDecoder(), 64)],
 	]);
 }
 
@@ -254,5 +254,5 @@ export async function fetchAllMaybeUserRewardDebt(
 }
 
 export function getUserRewardDebtSize(): number {
-	return 182;
+	return 214;
 }

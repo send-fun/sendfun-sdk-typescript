@@ -19,7 +19,6 @@ import {
 } from '../src/dex/generated/pdas/index.js';
 import {
 	findAltRegistryPda,
-	findCreatorFeeConfigPda,
 	findFeePresetPda,
 	findEventAuthorityPda as findNexusEventAuthorityPda,
 	findGlobalConfigPda as findNexusGlobalConfigPda,
@@ -65,10 +64,6 @@ const KNOWN_NEXUS_EVENT_AUTH = address(
 );
 const KNOWN_WSOL_REWARD_STATE = address(
 	'B9Z3t5c3AFtbuUfdeK41zGGL3dQ2AkgtGCjTcakZYwFr',
-);
-// Matches Rust `find_creator_fee_config_pda`. Guards the codama seeds.
-const KNOWN_CREATOR_FEE_CONFIG = address(
-	'9naWqjy2pqFvQ2Wd2EbiUnRuEEnKzAteAcjpqjtyUZx6',
 );
 const KNOWN_STAKING_WSOL_VAULT = address(
 	'AyisZJxXz9ywXhMwR3sb3oePxBB6UBvixXycAQCdSgrz',
@@ -406,41 +401,6 @@ describe('findUserRewardDebtPda', () => {
 			user: USER_A,
 			stakingMint: SEND_MINT,
 			rewardMint: MINT_A,
-		});
-		assert.notEqual(a, b);
-	});
-});
-
-describe('findCreatorFeeConfigPda', () => {
-	it('derives the frozen address for (creatorHash, quoteMint)', async () => {
-		const [addr, bump] = await findCreatorFeeConfigPda({
-			creatorHash: USER_A,
-			quoteMint: WSOL_MINT,
-		});
-		assert.equal(addr, KNOWN_CREATOR_FEE_CONFIG);
-		assert.equal(bump, 254);
-	});
-
-	it('is deterministic', async () => {
-		const [a] = await findCreatorFeeConfigPda({
-			creatorHash: USER_A,
-			quoteMint: WSOL_MINT,
-		});
-		const [b] = await findCreatorFeeConfigPda({
-			creatorHash: USER_A,
-			quoteMint: WSOL_MINT,
-		});
-		assert.equal(a, b);
-	});
-
-	it('different hashes produce different addresses', async () => {
-		const [a] = await findCreatorFeeConfigPda({
-			creatorHash: USER_A,
-			quoteMint: WSOL_MINT,
-		});
-		const [b] = await findCreatorFeeConfigPda({
-			creatorHash: USER_B,
-			quoteMint: WSOL_MINT,
 		});
 		assert.notEqual(a, b);
 	});

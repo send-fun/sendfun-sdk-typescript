@@ -11,10 +11,12 @@ import {
 	containsBytes,
 	fixEncoderSize,
 	getAddressDecoder,
+	getArrayDecoder,
 	getBooleanDecoder,
 	getBytesEncoder,
 	getI64Decoder,
 	getStructDecoder,
+	getU16Decoder,
 	getU32Decoder,
 	getU64Decoder,
 	getU8Decoder,
@@ -43,9 +45,7 @@ export type TokenCreateEvent = {
 	quoteMint: Address;
 	quoteDecimals: number;
 	coinCreator: Address;
-	creatorPlatform: string;
-	creatorId: string;
-	creatorFeeConfig: Address;
+	padding0: Array<bigint>;
 	platformConfig: Address;
 	name: string;
 	symbol: string;
@@ -56,6 +56,8 @@ export type TokenCreateEvent = {
 	baseReserves: bigint;
 	quoteReserves: bigint;
 	timestamp: bigint;
+	creatorFeeMode: number;
+	creatorFeeBps: number;
 };
 
 let getTokenCreateEventDecoderCache: Decoder<TokenCreateEvent> | undefined;
@@ -69,12 +71,7 @@ export function getTokenCreateEventDecoder(): Decoder<TokenCreateEvent> {
 		['quoteMint', getAddressDecoder()],
 		['quoteDecimals', getU8Decoder()],
 		['coinCreator', getAddressDecoder()],
-		[
-			'creatorPlatform',
-			addDecoderSizePrefix(getUtf8Decoder(), getU32Decoder()),
-		],
-		['creatorId', addDecoderSizePrefix(getUtf8Decoder(), getU32Decoder())],
-		['creatorFeeConfig', getAddressDecoder()],
+		['padding0', getArrayDecoder(getU64Decoder(), { size: 5 })],
 		['platformConfig', getAddressDecoder()],
 		['name', addDecoderSizePrefix(getUtf8Decoder(), getU32Decoder())],
 		['symbol', addDecoderSizePrefix(getUtf8Decoder(), getU32Decoder())],
@@ -85,6 +82,8 @@ export function getTokenCreateEventDecoder(): Decoder<TokenCreateEvent> {
 		['baseReserves', getU64Decoder()],
 		['quoteReserves', getU64Decoder()],
 		['timestamp', getI64Decoder()],
+		['creatorFeeMode', getU8Decoder()],
+		['creatorFeeBps', getU16Decoder()],
 	]));
 }
 

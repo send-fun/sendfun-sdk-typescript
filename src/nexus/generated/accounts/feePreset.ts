@@ -101,7 +101,7 @@ export function getFeePresetEncoder(): Encoder<FeePresetArgs> {
 			['launchpad', getLaunchpadFeesEncoder()],
 			['dex', getDexFeesEncoder()],
 			['platformConfig', getAddressEncoder()],
-			['reserved', fixEncoderSize(getBytesEncoder(), 32)],
+			['reserved', fixEncoderSize(getBytesEncoder(), 64)],
 		]),
 		(value) => ({ ...value, discriminator: FEE_PRESET_DISCRIMINATOR }),
 	);
@@ -118,7 +118,7 @@ export function getFeePresetDecoder(): Decoder<FeePreset> {
 		['launchpad', getLaunchpadFeesDecoder()],
 		['dex', getDexFeesDecoder()],
 		['platformConfig', getAddressDecoder()],
-		['reserved', fixDecoderSize(getBytesDecoder(), 32)],
+		['reserved', fixDecoderSize(getBytesDecoder(), 64)],
 	]);
 }
 

@@ -10,6 +10,7 @@ import {
 	containsBytes,
 	fixEncoderSize,
 	getAddressDecoder,
+	getArrayDecoder,
 	getBytesEncoder,
 	getI64Decoder,
 	getStructDecoder,
@@ -36,7 +37,7 @@ export type CreatorClaimEvent = {
 	quoteMint: Address;
 	platformConfig: Address;
 	coinCreator: Address;
-	creatorFeeConfig: Address;
+	padding0: Array<bigint>;
 	claimer: Address;
 	destinationOwner: Address;
 	amount: bigint;
@@ -55,7 +56,7 @@ export function getCreatorClaimEventDecoder(): FixedSizeDecoder<CreatorClaimEven
 		['quoteMint', getAddressDecoder()],
 		['platformConfig', getAddressDecoder()],
 		['coinCreator', getAddressDecoder()],
-		['creatorFeeConfig', getAddressDecoder()],
+		['padding0', getArrayDecoder(getU64Decoder(), { size: 4 })],
 		['claimer', getAddressDecoder()],
 		['destinationOwner', getAddressDecoder()],
 		['amount', getU64Decoder()],

@@ -10,6 +10,7 @@ import {
 	containsBytes,
 	fixEncoderSize,
 	getAddressDecoder,
+	getArrayDecoder,
 	getBytesEncoder,
 	getI64Decoder,
 	getStructDecoder,
@@ -37,7 +38,7 @@ export type MigrateEvent = {
 	quoteMint: Address;
 	pool: Address;
 	coinCreator: Address;
-	creatorFeeConfig: Address;
+	padding0: Array<bigint>;
 	platformConfig: Address;
 	baseAmount: bigint;
 	quoteAmount: bigint;
@@ -54,7 +55,7 @@ export function getMigrateEventDecoder(): FixedSizeDecoder<MigrateEvent> {
 		['quoteMint', getAddressDecoder()],
 		['pool', getAddressDecoder()],
 		['coinCreator', getAddressDecoder()],
-		['creatorFeeConfig', getAddressDecoder()],
+		['padding0', getArrayDecoder(getU64Decoder(), { size: 4 })],
 		['platformConfig', getAddressDecoder()],
 		['baseAmount', getU64Decoder()],
 		['quoteAmount', getU64Decoder()],

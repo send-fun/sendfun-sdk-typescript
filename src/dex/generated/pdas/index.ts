@@ -6,6 +6,7 @@
  * @see https://github.com/codama-idl/codama
  */
 
+export * from './creatorFeeConfig.js';
 export * from './eventAuthority.js';
 export * from './globalConfig.js';
 export * from './lpMint.js';

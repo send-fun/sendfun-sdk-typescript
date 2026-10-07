@@ -7,7 +7,6 @@
  */
 
 export * from './altRegistry.js';
-export * from './creatorFeeConfig.js';
 export * from './defaultFeePreset.js';
 export * from './defaultPartner.js';
 export * from './defaultPartnerMetadata.js';

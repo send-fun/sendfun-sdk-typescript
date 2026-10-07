@@ -10,11 +10,14 @@ import {
 	containsBytes,
 	fixEncoderSize,
 	getAddressDecoder,
+	getArrayDecoder,
 	getBooleanDecoder,
 	getBytesEncoder,
 	getI64Decoder,
 	getStructDecoder,
+	getU16Decoder,
 	getU64Decoder,
+	getU8Decoder,
 	type Address,
 	type FixedSizeDecoder,
 	type ReadonlyUint8Array,
@@ -42,7 +45,7 @@ export type TradeEvent = {
 	quoteMint: Address;
 	user: Address;
 	coinCreator: Address;
-	creatorFeeConfig: Address;
+	padding0: Array<bigint>;
 	platformConfig: Address;
 	baseAmount: bigint;
 	quoteAmountGross: bigint;
@@ -58,6 +61,8 @@ export type TradeEvent = {
 	baseReserves: bigint;
 	quoteReserves: bigint;
 	timestamp: bigint;
+	creatorFeeMode: number;
+	creatorFeeBps: number;
 };
 
 let getTradeEventDecoderCache: FixedSizeDecoder<TradeEvent> | undefined;
@@ -69,7 +74,7 @@ export function getTradeEventDecoder(): FixedSizeDecoder<TradeEvent> {
 		['quoteMint', getAddressDecoder()],
 		['user', getAddressDecoder()],
 		['coinCreator', getAddressDecoder()],
-		['creatorFeeConfig', getAddressDecoder()],
+		['padding0', getArrayDecoder(getU64Decoder(), { size: 4 })],
 		['platformConfig', getAddressDecoder()],
 		['baseAmount', getU64Decoder()],
 		['quoteAmountGross', getU64Decoder()],
@@ -85,6 +90,8 @@ export function getTradeEventDecoder(): FixedSizeDecoder<TradeEvent> {
 		['baseReserves', getU64Decoder()],
 		['quoteReserves', getU64Decoder()],
 		['timestamp', getI64Decoder()],
+		['creatorFeeMode', getU8Decoder()],
+		['creatorFeeBps', getU16Decoder()],
 	]));
 }
 

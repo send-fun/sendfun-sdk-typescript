@@ -23,7 +23,7 @@ export type DexFees = {
 	creationFeeCents: bigint;
 	protocolFeeBps: number;
 	lpFeeBps: number;
-	creatorFeeBps: number;
+	maxCreatorFeeBps: number;
 	feeDecaySeconds: number;
 	feeDecayStartBps: number;
 };
@@ -32,7 +32,7 @@ export type DexFeesArgs = {
 	creationFeeCents: number | bigint;
 	protocolFeeBps: number;
 	lpFeeBps: number;
-	creatorFeeBps: number;
+	maxCreatorFeeBps: number;
 	feeDecaySeconds: number;
 	feeDecayStartBps: number;
 };
@@ -42,7 +42,7 @@ export function getDexFeesEncoder(): FixedSizeEncoder<DexFeesArgs> {
 		['creationFeeCents', getU64Encoder()],
 		['protocolFeeBps', getU16Encoder()],
 		['lpFeeBps', getU16Encoder()],
-		['creatorFeeBps', getU16Encoder()],
+		['maxCreatorFeeBps', getU16Encoder()],
 		['feeDecaySeconds', getU16Encoder()],
 		['feeDecayStartBps', getU16Encoder()],
 	]);
@@ -53,7 +53,7 @@ export function getDexFeesDecoder(): FixedSizeDecoder<DexFees> {
 		['creationFeeCents', getU64Decoder()],
 		['protocolFeeBps', getU16Decoder()],
 		['lpFeeBps', getU16Decoder()],
-		['creatorFeeBps', getU16Decoder()],
+		['maxCreatorFeeBps', getU16Decoder()],
 		['feeDecaySeconds', getU16Decoder()],
 		['feeDecayStartBps', getU16Decoder()],
 	]);

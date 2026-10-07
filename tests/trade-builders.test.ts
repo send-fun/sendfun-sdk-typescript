@@ -53,6 +53,12 @@ const SHARED = {
 	platformConfig: SENDFUN_PLATFORM_ADDRESS,
 } as const;
 
+const CREATOR_FEE_TERMS = {
+	creatorFeeMode: 0,
+	creatorFeeBps: 30,
+	dexCreatorFeeBps: 10,
+} as const;
+
 const CURVE_RESERVES = {
 	virtualBaseReserves: 1_000_000_000_000n,
 	virtualQuoteReserves: 30_000_000_000n,
@@ -131,6 +137,16 @@ describe('trade builders pass user token accounts through', () => {
 	});
 });
 
+function decodeBuy(instruction: Instruction): bigint {
+	const { data } = instruction;
+	if (data === undefined) {
+		throw new Error('the appended buy carries no instruction data');
+	}
+	return launchpad.instructions
+		.getBuyExactInInstructionDataDecoder()
+		.decode(data).minAmountOut;
+}
+
 describe('create-and-buy appends the buy to the create', () => {
 	const PARTNER = address('Hs3bBEkKQaR9dGkFpQyBtnQvHXWyKMYyYnFVLZ4WM5Ac');
 	// A signer on purpose: the `PartnerConfig` PDA seed must accept one.
@@ -150,8 +166,7 @@ describe('create-and-buy appends the buy to the create', () => {
 				name: 'Test',
 				symbol: 'TEST',
 				uri: 'https://example.com/t.json',
-				creatorPlatform: 'wallet',
-				creatorId: USER,
+				...CREATOR_FEE_TERMS,
 				initialVirtualBaseReserves: CURVE_RESERVES.virtualBaseReserves,
 				initialVirtualQuoteReserves:
 					CURVE_RESERVES.virtualQuoteReserves,
@@ -162,6 +177,17 @@ describe('create-and-buy appends the buy to the create', () => {
 			});
 
 		assert.equal(instructions.length, 2);
+
+		const createData = instructions[0]?.data;
+		if (createData === undefined) {
+			throw new Error('the create carries no instruction data');
+		}
+		const createArgs = launchpad.instructions
+			.getCreateTokenInstructionDataDecoder()
+			.decode(createData);
+		assert.equal(createArgs.creatorFeeMode, 0);
+		assert.equal(createArgs.creatorFeeBps, 30);
+		assert.equal(createArgs.dexCreatorFeeBps, 10);
 
 		const [bondingCurve] = await launchpad.pda.findBondingCurvePda({
 			baseMint: BASE_MINT,
@@ -178,53 +204,158 @@ describe('create-and-buy appends the buy to the create', () => {
 		assert.equal(curveSlot?.role, AccountRole.WRITABLE);
 	});
 
+	it('names coinCreator as given, derives the creator fee config PDA and encodes no creator identity', async () => {
+		const coinCreator = address(
+			'9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM',
+		);
+		const create = await launchpad.create.buildCreateTokenInstruction({
+			user,
+			coinCreator,
+			baseMint: createNoopSigner(BASE_MINT),
+			quoteMint: TKALSHI_MINT,
+			quoteTokenProgram: TOKEN_2022_PROGRAM_ADDRESS,
+			partner,
+			platformConfig: SENDFUN_PLATFORM_ADDRESS,
+			name: 'Test',
+			symbol: 'TEST',
+			uri: 'https://example.com/t.json',
+			...CREATOR_FEE_TERMS,
+		});
+
+		const accounts = create.accounts ?? [];
+		assert.equal(accounts.length, 28);
+		assert.equal(accounts[0]?.address, USER);
+		assert.equal(accounts[0]?.role, AccountRole.WRITABLE_SIGNER);
+		assert.equal(accounts[2]?.address, coinCreator);
+		assert.equal(accounts[2]?.role, AccountRole.READONLY);
+		// `["creator_fee_config", BASE_MINT, TKALSHI_MINT]` under the launchpad.
+		assert.equal(
+			accounts[9]?.address,
+			'3njD8ZFphZUA3B27h9rKULMnqJV7RP5iFF1u1UEP4CjK',
+		);
+		assert.equal(
+			accounts[9]?.address,
+			(
+				await launchpad.pda.findCreatorFeeConfigPda({
+					baseMint: BASE_MINT,
+					quoteMint: TKALSHI_MINT,
+				})
+			)[0],
+		);
+		assert.notEqual(
+			accounts[9]?.address,
+			(
+				await dex.pda.findCreatorFeeConfigPda({
+					baseMint: BASE_MINT,
+					quoteMint: TKALSHI_MINT,
+				})
+			)[0],
+		);
+		assert.equal(accounts[9]?.role, AccountRole.WRITABLE);
+
+		if (create.data === undefined) {
+			throw new Error('the create carries no instruction data');
+		}
+		const args = launchpad.instructions
+			.getCreateTokenInstructionDataDecoder()
+			.decode(create.data);
+		const { discriminator, ...decoded } = args;
+		assert.deepEqual(
+			discriminator,
+			launchpad.instructions.CREATE_TOKEN_DISCRIMINATOR,
+		);
+		assert.deepEqual(decoded, {
+			platformConfig: SENDFUN_PLATFORM_ADDRESS,
+			name: 'Test',
+			symbol: 'TEST',
+			uri: 'https://example.com/t.json',
+			creatorFeeMode: 0,
+			creatorFeeBps: 30,
+			dexCreatorFeeBps: 10,
+		});
+		// 8 discriminator, 32 platformConfig, 4 + 4 name, 4 + 4 symbol, 4 + 26 uri,
+		// 1 + 2 + 2 fee terms (mode, bps, pool bps).
+		assert.equal(create.data.length, 91);
+	});
+
+	// `migrate` refuses any creator fee config address but the two PDAs.
+	it('derives the curve and the pool creator fee config PDAs for migrate', async () => {
+		const migrate = await launchpad.migrate.buildMigrateInstruction({
+			caller: user,
+			baseMint: BASE_MINT,
+			quoteMint: TKALSHI_MINT,
+			quoteTokenProgram: TOKEN_2022_PROGRAM_ADDRESS,
+		});
+
+		const accounts = migrate.accounts ?? [];
+		assert.equal(accounts.length, 23);
+		// `["creator_fee_config", BASE_MINT, TKALSHI_MINT]` under the launchpad.
+		assert.equal(
+			accounts[15]?.address,
+			'3njD8ZFphZUA3B27h9rKULMnqJV7RP5iFF1u1UEP4CjK',
+		);
+		assert.equal(
+			accounts[15]?.address,
+			(
+				await launchpad.pda.findCreatorFeeConfigPda({
+					baseMint: BASE_MINT,
+					quoteMint: TKALSHI_MINT,
+				})
+			)[0],
+		);
+		assert.equal(accounts[15]?.role, AccountRole.WRITABLE);
+		// The same seeds under the dex.
+		assert.equal(
+			accounts[22]?.address,
+			'CZgYKqL9TydsDxinjFT84d6htBT6uaYnc8pZtKB7GBiU',
+		);
+		assert.equal(
+			accounts[22]?.address,
+			(
+				await dex.pda.findCreatorFeeConfigPda({
+					baseMint: BASE_MINT,
+					quoteMint: TKALSHI_MINT,
+				})
+			)[0],
+		);
+		assert.equal(accounts[22]?.role, AccountRole.WRITABLE);
+	});
+
+	async function buildFirstBuy(quoteFee?: MintFee): Promise<Instruction> {
+		const { instructions } =
+			await launchpad.create.buildCreateAndBuyInstructions({
+				user,
+				coinCreator: USER,
+				baseMint: createNoopSigner(BASE_MINT),
+				// WSOL is classic SPL and has no transfer fee.
+				quoteMint: TKALSHI_MINT,
+				quoteTokenProgram: TOKEN_2022_PROGRAM_ADDRESS,
+				partner,
+				platformConfig: SENDFUN_PLATFORM_ADDRESS,
+				name: 'Test',
+				symbol: 'TEST',
+				uri: 'https://example.com/t.json',
+				...CREATOR_FEE_TERMS,
+				initialVirtualBaseReserves: CURVE_RESERVES.virtualBaseReserves,
+				initialVirtualQuoteReserves:
+					CURVE_RESERVES.virtualQuoteReserves,
+				initialRealBaseReserves: CURVE_RESERVES.realBaseReserves,
+				feeBps: FEE_BPS,
+				slippageBps: SLIPPAGE_BPS,
+				buyQuoteAmount: FIRST_BUY,
+				quoteFee,
+			});
+
+		const buy = instructions.at(1);
+		if (buy === undefined) {
+			throw new Error('the builder appended no buy instruction');
+		}
+		return buy;
+	}
+
 	// Without `quoteFee`, the first-buy minimum ignores the mint's cut and is too
 	// high. A cut above slippage then makes the launch fail.
 	describe('with a quote mint that charges in transit', () => {
-		async function buildFirstBuy(quoteFee?: MintFee): Promise<Instruction> {
-			const { instructions } =
-				await launchpad.create.buildCreateAndBuyInstructions({
-					user,
-					coinCreator: USER,
-					baseMint: createNoopSigner(BASE_MINT),
-					// WSOL is classic SPL and has no transfer fee.
-					quoteMint: TKALSHI_MINT,
-					quoteTokenProgram: TOKEN_2022_PROGRAM_ADDRESS,
-					partner,
-					platformConfig: SENDFUN_PLATFORM_ADDRESS,
-					name: 'Test',
-					symbol: 'TEST',
-					uri: 'https://example.com/t.json',
-					creatorPlatform: 'wallet',
-					creatorId: USER,
-					initialVirtualBaseReserves:
-						CURVE_RESERVES.virtualBaseReserves,
-					initialVirtualQuoteReserves:
-						CURVE_RESERVES.virtualQuoteReserves,
-					initialRealBaseReserves: CURVE_RESERVES.realBaseReserves,
-					feeBps: FEE_BPS,
-					slippageBps: SLIPPAGE_BPS,
-					buyQuoteAmount: FIRST_BUY,
-					quoteFee,
-				});
-
-			const buy = instructions.at(1);
-			if (buy === undefined) {
-				throw new Error('the builder appended no buy instruction');
-			}
-			return buy;
-		}
-
-		function decodeBuy(instruction: Instruction): bigint {
-			const { data } = instruction;
-			if (data === undefined) {
-				throw new Error('the appended buy carries no instruction data');
-			}
-			return launchpad.instructions
-				.getBuyExactInInstructionDataDecoder()
-				.decode(data).minAmountOut;
-		}
-
 		it('bounds the appended buy on the base the creator is credited', async () => {
 			const quote = buyExactIn({
 				reserveQuote: CURVE_RESERVES.virtualQuoteReserves,

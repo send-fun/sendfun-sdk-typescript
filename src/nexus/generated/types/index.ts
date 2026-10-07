@@ -7,7 +7,6 @@
  */
 
 export * from './authPlatformEntry.js';
-export * from './callerType.js';
 export * from './dexFees.js';
 export * from './feeConfig.js';
 export * from './launchpadFees.js';

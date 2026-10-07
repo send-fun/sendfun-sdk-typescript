@@ -18,12 +18,16 @@ import {
 	fixEncoderSize,
 	getAddressDecoder,
 	getAddressEncoder,
+	getArrayDecoder,
+	getArrayEncoder,
 	getBytesDecoder,
 	getBytesEncoder,
 	getI64Decoder,
 	getI64Encoder,
 	getStructDecoder,
 	getStructEncoder,
+	getU16Decoder,
+	getU16Encoder,
 	getU64Decoder,
 	getU64Encoder,
 	getU8Decoder,
@@ -68,7 +72,7 @@ export type Pool = {
 	quoteMint: Address;
 	quoteDecimals: number;
 	coinCreator: Address;
-	creatorFeeConfig: Address;
+	padding0: Array<bigint>;
 	baseVault: Address;
 	quoteVault: Address;
 	lpMint: Address;
@@ -80,6 +84,8 @@ export type Pool = {
 	protocolOwed: bigint;
 	creatorOwed: bigint;
 	platformConfig: Address;
+	creatorFeeMode: number;
+	creatorFeeBps: number;
 	reserved: ReadonlyUint8Array;
 };
 
@@ -92,7 +98,7 @@ export type PoolArgs = {
 	quoteMint: Address;
 	quoteDecimals: number;
 	coinCreator: Address;
-	creatorFeeConfig: Address;
+	padding0: Array<number | bigint>;
 	baseVault: Address;
 	quoteVault: Address;
 	lpMint: Address;
@@ -104,6 +110,8 @@ export type PoolArgs = {
 	protocolOwed: number | bigint;
 	creatorOwed: number | bigint;
 	platformConfig: Address;
+	creatorFeeMode: number;
+	creatorFeeBps: number;
 	reserved: ReadonlyUint8Array;
 };
 
@@ -120,7 +128,7 @@ export function getPoolEncoder(): FixedSizeEncoder<PoolArgs> {
 			['quoteMint', getAddressEncoder()],
 			['quoteDecimals', getU8Encoder()],
 			['coinCreator', getAddressEncoder()],
-			['creatorFeeConfig', getAddressEncoder()],
+			['padding0', getArrayEncoder(getU64Encoder(), { size: 4 })],
 			['baseVault', getAddressEncoder()],
 			['quoteVault', getAddressEncoder()],
 			['lpMint', getAddressEncoder()],
@@ -132,7 +140,9 @@ export function getPoolEncoder(): FixedSizeEncoder<PoolArgs> {
 			['protocolOwed', getU64Encoder()],
 			['creatorOwed', getU64Encoder()],
 			['platformConfig', getAddressEncoder()],
-			['reserved', fixEncoderSize(getBytesEncoder(), 64)],
+			['creatorFeeMode', getU8Encoder()],
+			['creatorFeeBps', getU16Encoder()],
+			['reserved', fixEncoderSize(getBytesEncoder(), 256)],
 		]),
 		(value) => ({ ...value, discriminator: POOL_DISCRIMINATOR }),
 	);
@@ -150,7 +160,7 @@ export function getPoolDecoder(): FixedSizeDecoder<Pool> {
 		['quoteMint', getAddressDecoder()],
 		['quoteDecimals', getU8Decoder()],
 		['coinCreator', getAddressDecoder()],
-		['creatorFeeConfig', getAddressDecoder()],
+		['padding0', getArrayDecoder(getU64Decoder(), { size: 4 })],
 		['baseVault', getAddressDecoder()],
 		['quoteVault', getAddressDecoder()],
 		['lpMint', getAddressDecoder()],
@@ -162,7 +172,9 @@ export function getPoolDecoder(): FixedSizeDecoder<Pool> {
 		['protocolOwed', getU64Decoder()],
 		['creatorOwed', getU64Decoder()],
 		['platformConfig', getAddressDecoder()],
-		['reserved', fixDecoderSize(getBytesDecoder(), 64)],
+		['creatorFeeMode', getU8Decoder()],
+		['creatorFeeBps', getU16Decoder()],
+		['reserved', fixDecoderSize(getBytesDecoder(), 256)],
 	]);
 }
 
@@ -279,5 +291,5 @@ export async function fetchAllMaybePool(
 }
 
 export function getPoolSize(): number {
-	return 389;
+	return 584;
 }

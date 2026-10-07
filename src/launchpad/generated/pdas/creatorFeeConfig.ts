@@ -13,10 +13,10 @@ import {
 	type Address,
 	type ProgramDerivedAddress,
 } from '@solana/kit';
-import { SEND_NEXUS_PROGRAM_ADDRESS } from '../programs/index.js';
+import { SEND_LAUNCHPAD_PROGRAM_ADDRESS } from '../programs/index.js';
 
 export type CreatorFeeConfigSeeds = {
-	creatorHash: Address;
+	baseMint: Address;
 	quoteMint: Address;
 };
 
@@ -24,15 +24,15 @@ export async function findCreatorFeeConfigPda(
 	seeds: CreatorFeeConfigSeeds,
 ): Promise<ProgramDerivedAddress> {
 	return await getProgramDerivedAddress({
-		programAddress: SEND_NEXUS_PROGRAM_ADDRESS,
+		programAddress: SEND_LAUNCHPAD_PROGRAM_ADDRESS,
 		seeds: [
 			getBytesEncoder().encode(
 				new Uint8Array([
-					99, 114, 101, 97, 116, 111, 114, 95, 102, 101, 101, 95, 98,
-					97, 108, 97, 110, 99, 101,
+					99, 114, 101, 97, 116, 111, 114, 95, 102, 101, 101, 95, 99,
+					111, 110, 102, 105, 103,
 				]),
 			),
-			getAddressEncoder().encode(seeds.creatorHash),
+			getAddressEncoder().encode(seeds.baseMint),
 			getAddressEncoder().encode(seeds.quoteMint),
 		],
 	});

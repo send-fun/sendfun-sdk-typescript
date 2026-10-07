@@ -10,9 +10,11 @@ import {
 	containsBytes,
 	fixEncoderSize,
 	getAddressDecoder,
+	getArrayDecoder,
 	getBytesEncoder,
 	getI64Decoder,
 	getStructDecoder,
+	getU16Decoder,
 	getU64Decoder,
 	getU8Decoder,
 	type Address,
@@ -38,7 +40,7 @@ export type PoolCreateEvent = {
 	quoteMint: Address;
 	quoteDecimals: number;
 	coinCreator: Address;
-	creatorFeeConfig: Address;
+	padding0: Array<bigint>;
 	platformConfig: Address;
 	baseVault: Address;
 	quoteVault: Address;
@@ -47,6 +49,8 @@ export type PoolCreateEvent = {
 	baseReserves: bigint;
 	quoteReserves: bigint;
 	timestamp: bigint;
+	creatorFeeMode: number;
+	creatorFeeBps: number;
 };
 
 let getPoolCreateEventDecoderCache:
@@ -61,7 +65,7 @@ export function getPoolCreateEventDecoder(): FixedSizeDecoder<PoolCreateEvent> {
 		['quoteMint', getAddressDecoder()],
 		['quoteDecimals', getU8Decoder()],
 		['coinCreator', getAddressDecoder()],
-		['creatorFeeConfig', getAddressDecoder()],
+		['padding0', getArrayDecoder(getU64Decoder(), { size: 4 })],
 		['platformConfig', getAddressDecoder()],
 		['baseVault', getAddressDecoder()],
 		['quoteVault', getAddressDecoder()],
@@ -70,6 +74,8 @@ export function getPoolCreateEventDecoder(): FixedSizeDecoder<PoolCreateEvent> {
 		['baseReserves', getU64Decoder()],
 		['quoteReserves', getU64Decoder()],
 		['timestamp', getI64Decoder()],
+		['creatorFeeMode', getU8Decoder()],
+		['creatorFeeBps', getU16Decoder()],
 	]));
 }
 

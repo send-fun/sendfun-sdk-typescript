@@ -36,8 +36,8 @@ export const SEND_DEX_ERROR__INVALID_POOL_BALANCE = 0x1778; // 6008
 export const SEND_DEX_ERROR__INSUFFICIENT_POOL_BALANCE = 0x1779; // 6009
 /** InvalidAuthority: Invalid authority */
 export const SEND_DEX_ERROR__INVALID_AUTHORITY = 0x177a; // 6010
-/** InvalidCreatorHash: creator_hash does not match (creator_platform, creator_id) */
-export const SEND_DEX_ERROR__INVALID_CREATOR_HASH = 0x177b; // 6011
+/** InvalidCoinCreator: Invalid coin creator */
+export const SEND_DEX_ERROR__INVALID_COIN_CREATOR = 0x177b; // 6011
 /** InvalidPlatformConfig: Platform config cannot be the default address */
 export const SEND_DEX_ERROR__INVALID_PLATFORM_CONFIG = 0x177c; // 6012
 /** ProgramPaused: Program is paused */
@@ -64,12 +64,16 @@ export const SEND_DEX_ERROR__USER_TOKEN_ACCOUNT_WRONG_MINT = 0x1b61; // 7009
 export const SEND_DEX_ERROR__USER_TOKEN_ACCOUNT_WRONG_AUTHORITY = 0x1b62; // 7010
 /** NothingToClaim: Nothing to claim */
 export const SEND_DEX_ERROR__NOTHING_TO_CLAIM = 0x1b63; // 7011
-/** InvalidCreatorId: Creator identity is not a decodable wallet address */
-export const SEND_DEX_ERROR__INVALID_CREATOR_ID = 0x1b64; // 7012
+/** Unused7012: Unused */
+export const SEND_DEX_ERROR__UNUSED7012 = 0x1b64; // 7012
 /** QuoteMintPriceUnset: Quote mint has no USDC price on its nexus reward state */
 export const SEND_DEX_ERROR__QUOTE_MINT_PRICE_UNSET = 0x1b65; // 7013
 /** TransferFeeNotSettleable: Token-2022 transfer fee schedule cannot settle the exact amount */
 export const SEND_DEX_ERROR__TRANSFER_FEE_NOT_SETTLEABLE = 0x1b66; // 7014
+/** CreatorFeeTooHigh: Creator fee exceeds the partner's maximum */
+export const SEND_DEX_ERROR__CREATOR_FEE_TOO_HIGH = 0x1b67; // 7015
+/** CreatorFeeModeNotAllowed: Creator fee mode is not allowed by the partner config */
+export const SEND_DEX_ERROR__CREATOR_FEE_MODE_NOT_ALLOWED = 0x1b68; // 7016
 /** InsufficientLiquidity: Insufficient liquidity */
 export const SEND_DEX_ERROR__INSUFFICIENT_LIQUIDITY = 0x1bbc; // 7100
 /** InvalidAmount: Invalid amount */
@@ -77,14 +81,15 @@ export const SEND_DEX_ERROR__INVALID_AMOUNT = 0x1bbd; // 7101
 
 export type SendDexError =
 	| typeof SEND_DEX_ERROR__ARITHMETIC_OVERFLOW
+	| typeof SEND_DEX_ERROR__CREATOR_FEE_MODE_NOT_ALLOWED
+	| typeof SEND_DEX_ERROR__CREATOR_FEE_TOO_HIGH
 	| typeof SEND_DEX_ERROR__INSUFFICIENT_BALANCE
 	| typeof SEND_DEX_ERROR__INSUFFICIENT_LIQUIDITY
 	| typeof SEND_DEX_ERROR__INSUFFICIENT_POOL_BALANCE
 	| typeof SEND_DEX_ERROR__INVALID_AMOUNT
 	| typeof SEND_DEX_ERROR__INVALID_AUTHORITY
 	| typeof SEND_DEX_ERROR__INVALID_BASE_MINT
-	| typeof SEND_DEX_ERROR__INVALID_CREATOR_HASH
-	| typeof SEND_DEX_ERROR__INVALID_CREATOR_ID
+	| typeof SEND_DEX_ERROR__INVALID_COIN_CREATOR
 	| typeof SEND_DEX_ERROR__INVALID_DEPOSIT
 	| typeof SEND_DEX_ERROR__INVALID_PLATFORM_CONFIG
 	| typeof SEND_DEX_ERROR__INVALID_POOL_BALANCE
@@ -102,6 +107,7 @@ export type SendDexError =
 	| typeof SEND_DEX_ERROR__TEXT_TOO_LONG
 	| typeof SEND_DEX_ERROR__TRANSFER_FEE_NOT_SETTLEABLE
 	| typeof SEND_DEX_ERROR__UNAUTHORIZED
+	| typeof SEND_DEX_ERROR__UNUSED7012
 	| typeof SEND_DEX_ERROR__USER_TOKEN_ACCOUNT_INVALID
 	| typeof SEND_DEX_ERROR__USER_TOKEN_ACCOUNT_WRONG_AUTHORITY
 	| typeof SEND_DEX_ERROR__USER_TOKEN_ACCOUNT_WRONG_MINT
@@ -109,14 +115,15 @@ export type SendDexError =
 
 export const sendDexErrorMessages: Record<SendDexError, string> = {
 	[SEND_DEX_ERROR__ARITHMETIC_OVERFLOW]: `Arithmetic overflow`,
+	[SEND_DEX_ERROR__CREATOR_FEE_MODE_NOT_ALLOWED]: `Creator fee mode is not allowed by the partner config`,
+	[SEND_DEX_ERROR__CREATOR_FEE_TOO_HIGH]: `Creator fee exceeds the partner's maximum`,
 	[SEND_DEX_ERROR__INSUFFICIENT_BALANCE]: `Insufficient balance in source account`,
 	[SEND_DEX_ERROR__INSUFFICIENT_LIQUIDITY]: `Insufficient liquidity`,
 	[SEND_DEX_ERROR__INSUFFICIENT_POOL_BALANCE]: `Insufficient pool balance`,
 	[SEND_DEX_ERROR__INVALID_AMOUNT]: `Invalid amount`,
 	[SEND_DEX_ERROR__INVALID_AUTHORITY]: `Invalid authority`,
 	[SEND_DEX_ERROR__INVALID_BASE_MINT]: `Invalid base mint`,
-	[SEND_DEX_ERROR__INVALID_CREATOR_HASH]: `creator_hash does not match (creator_platform, creator_id)`,
-	[SEND_DEX_ERROR__INVALID_CREATOR_ID]: `Creator identity is not a decodable wallet address`,
+	[SEND_DEX_ERROR__INVALID_COIN_CREATOR]: `Invalid coin creator`,
 	[SEND_DEX_ERROR__INVALID_DEPOSIT]: `Invalid deposit`,
 	[SEND_DEX_ERROR__INVALID_PLATFORM_CONFIG]: `Platform config cannot be the default address`,
 	[SEND_DEX_ERROR__INVALID_POOL_BALANCE]: `Invalid pool balance`,
@@ -134,6 +141,7 @@ export const sendDexErrorMessages: Record<SendDexError, string> = {
 	[SEND_DEX_ERROR__TEXT_TOO_LONG]: `Text too long`,
 	[SEND_DEX_ERROR__TRANSFER_FEE_NOT_SETTLEABLE]: `Token-2022 transfer fee schedule cannot settle the exact amount`,
 	[SEND_DEX_ERROR__UNAUTHORIZED]: `Unauthorized`,
+	[SEND_DEX_ERROR__UNUSED7012]: `Unused`,
 	[SEND_DEX_ERROR__USER_TOKEN_ACCOUNT_INVALID]: `User token account is not an initialized token account`,
 	[SEND_DEX_ERROR__USER_TOKEN_ACCOUNT_WRONG_AUTHORITY]: `User token account is not owned by the trading user`,
 	[SEND_DEX_ERROR__USER_TOKEN_ACCOUNT_WRONG_MINT]: `User token account mint does not match the trade`,

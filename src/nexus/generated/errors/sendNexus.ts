@@ -98,12 +98,16 @@ export const SEND_NEXUS_ERROR__USER_TOKEN_ACCOUNT_WRONG_MINT = 0x1b61; // 7009
 export const SEND_NEXUS_ERROR__USER_TOKEN_ACCOUNT_WRONG_AUTHORITY = 0x1b62; // 7010
 /** NothingToClaim: Nothing to claim */
 export const SEND_NEXUS_ERROR__NOTHING_TO_CLAIM = 0x1b63; // 7011
-/** InvalidCreatorId: Creator identity is not a decodable wallet address */
-export const SEND_NEXUS_ERROR__INVALID_CREATOR_ID = 0x1b64; // 7012
+/** Unused7012: Unused */
+export const SEND_NEXUS_ERROR__UNUSED7012 = 0x1b64; // 7012
 /** QuoteMintPriceUnset: Quote mint has no USDC price on its nexus reward state */
 export const SEND_NEXUS_ERROR__QUOTE_MINT_PRICE_UNSET = 0x1b65; // 7013
 /** TransferFeeNotSettleable: Token-2022 transfer fee schedule cannot settle the exact amount */
 export const SEND_NEXUS_ERROR__TRANSFER_FEE_NOT_SETTLEABLE = 0x1b66; // 7014
+/** CreatorFeeTooHigh: Creator fee exceeds the partner's maximum */
+export const SEND_NEXUS_ERROR__CREATOR_FEE_TOO_HIGH = 0x1b67; // 7015
+/** CreatorFeeModeNotAllowed: Creator fee mode is not allowed by the partner config */
+export const SEND_NEXUS_ERROR__CREATOR_FEE_MODE_NOT_ALLOWED = 0x1b68; // 7016
 /** InsufficientLiquidity: Insufficient liquidity */
 export const SEND_NEXUS_ERROR__INSUFFICIENT_LIQUIDITY = 0x1bbc; // 7100
 /** InvalidAmount: Invalid amount */
@@ -112,6 +116,8 @@ export const SEND_NEXUS_ERROR__INVALID_AMOUNT = 0x1bbd; // 7101
 export type SendNexusError =
 	| typeof SEND_NEXUS_ERROR__AMBIGUOUS_FEE_SOURCE
 	| typeof SEND_NEXUS_ERROR__ARITHMETIC_OVERFLOW
+	| typeof SEND_NEXUS_ERROR__CREATOR_FEE_MODE_NOT_ALLOWED
+	| typeof SEND_NEXUS_ERROR__CREATOR_FEE_TOO_HIGH
 	| typeof SEND_NEXUS_ERROR__DUPLICATE_AUTH_PLATFORM_NAME
 	| typeof SEND_NEXUS_ERROR__INSUFFICIENT_LIQUIDITY
 	| typeof SEND_NEXUS_ERROR__INSUFFICIENT_STAKE
@@ -119,7 +125,6 @@ export type SendNexusError =
 	| typeof SEND_NEXUS_ERROR__INVALID_AUTHORITY
 	| typeof SEND_NEXUS_ERROR__INVALID_AUTH_PLATFORM_INDEX
 	| typeof SEND_NEXUS_ERROR__INVALID_AUTH_PLATFORM_NAME
-	| typeof SEND_NEXUS_ERROR__INVALID_CREATOR_ID
 	| typeof SEND_NEXUS_ERROR__INVALID_DESTINATION
 	| typeof SEND_NEXUS_ERROR__INVALID_FEE_PRESET
 	| typeof SEND_NEXUS_ERROR__INVALID_MINT
@@ -153,6 +158,7 @@ export type SendNexusError =
 	| typeof SEND_NEXUS_ERROR__TOO_MANY_AUTH_PLATFORMS
 	| typeof SEND_NEXUS_ERROR__TRANSFER_FEE_NOT_SETTLEABLE
 	| typeof SEND_NEXUS_ERROR__UNAUTHORIZED
+	| typeof SEND_NEXUS_ERROR__UNUSED7012
 	| typeof SEND_NEXUS_ERROR__USER_TOKEN_ACCOUNT_INVALID
 	| typeof SEND_NEXUS_ERROR__USER_TOKEN_ACCOUNT_WRONG_AUTHORITY
 	| typeof SEND_NEXUS_ERROR__USER_TOKEN_ACCOUNT_WRONG_MINT
@@ -161,6 +167,8 @@ export type SendNexusError =
 export const sendNexusErrorMessages: Record<SendNexusError, string> = {
 	[SEND_NEXUS_ERROR__AMBIGUOUS_FEE_SOURCE]: `Cannot specify both fee_preset and custom_fees`,
 	[SEND_NEXUS_ERROR__ARITHMETIC_OVERFLOW]: `Arithmetic overflow`,
+	[SEND_NEXUS_ERROR__CREATOR_FEE_MODE_NOT_ALLOWED]: `Creator fee mode is not allowed by the partner config`,
+	[SEND_NEXUS_ERROR__CREATOR_FEE_TOO_HIGH]: `Creator fee exceeds the partner's maximum`,
 	[SEND_NEXUS_ERROR__DUPLICATE_AUTH_PLATFORM_NAME]: `Duplicate auth platform name`,
 	[SEND_NEXUS_ERROR__INSUFFICIENT_LIQUIDITY]: `Insufficient liquidity`,
 	[SEND_NEXUS_ERROR__INSUFFICIENT_STAKE]: `Insufficient stake balance`,
@@ -168,7 +176,6 @@ export const sendNexusErrorMessages: Record<SendNexusError, string> = {
 	[SEND_NEXUS_ERROR__INVALID_AUTHORITY]: `Invalid authority`,
 	[SEND_NEXUS_ERROR__INVALID_AUTH_PLATFORM_INDEX]: `Invalid auth platform index`,
 	[SEND_NEXUS_ERROR__INVALID_AUTH_PLATFORM_NAME]: `Invalid auth platform name`,
-	[SEND_NEXUS_ERROR__INVALID_CREATOR_ID]: `Creator identity is not a decodable wallet address`,
 	[SEND_NEXUS_ERROR__INVALID_DESTINATION]: `Invalid destination account`,
 	[SEND_NEXUS_ERROR__INVALID_FEE_PRESET]: `Invalid fee configuration`,
 	[SEND_NEXUS_ERROR__INVALID_MINT]: `Invalid mint`,
@@ -202,6 +209,7 @@ export const sendNexusErrorMessages: Record<SendNexusError, string> = {
 	[SEND_NEXUS_ERROR__TOO_MANY_AUTH_PLATFORMS]: `Too many auth platforms (max 255)`,
 	[SEND_NEXUS_ERROR__TRANSFER_FEE_NOT_SETTLEABLE]: `Token-2022 transfer fee schedule cannot settle the exact amount`,
 	[SEND_NEXUS_ERROR__UNAUTHORIZED]: `Unauthorized`,
+	[SEND_NEXUS_ERROR__UNUSED7012]: `Unused`,
 	[SEND_NEXUS_ERROR__USER_TOKEN_ACCOUNT_INVALID]: `User token account is not an initialized token account`,
 	[SEND_NEXUS_ERROR__USER_TOKEN_ACCOUNT_WRONG_AUTHORITY]: `User token account is not owned by the trading user`,
 	[SEND_NEXUS_ERROR__USER_TOKEN_ACCOUNT_WRONG_MINT]: `User token account mint does not match the trade`,

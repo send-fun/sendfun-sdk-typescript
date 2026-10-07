@@ -183,7 +183,12 @@ export async function runCompat(
 		quoteMint: constants.WSOL_MINT,
 		quoteDecimals: 9,
 		coinCreator: address(20),
-		creatorFeeConfig: address(21),
+		padding0: [
+			0x1515_1515_1515_1515n,
+			0x1515_1515_1515_1515n,
+			0x1515_1515_1515_1515n,
+			0x1515_1515_1515_1515n,
+		],
 		partner: constants.DEFAULT_PARTNER,
 		baseVault: address(22),
 		quoteVault: address(23),
@@ -195,7 +200,10 @@ export async function runCompat(
 		protocolOwed: 42n,
 		creatorOwed: 43n,
 		platformConfig,
-		reserved: new Uint8Array(64).fill(9),
+		creatorFeeMode: 255,
+		creatorFeeBps: 100,
+		dexCreatorFeeBps: 65_535,
+		reserved: new Uint8Array(256).fill(9),
 	};
 	const poolArgs = {
 		version: 1,
@@ -206,7 +214,12 @@ export async function runCompat(
 		quoteMint: constants.USDC_MINT,
 		quoteDecimals: 6,
 		coinCreator: address(30),
-		creatorFeeConfig: address(31),
+		padding0: [
+			0x1f1f_1f1f_1f1f_1f1fn,
+			0x1f1f_1f1f_1f1f_1f1fn,
+			0x1f1f_1f1f_1f1f_1f1fn,
+			0x1f1f_1f1f_1f1f_1f1fn,
+		],
 		baseVault: address(32),
 		quoteVault: address(33),
 		lpMint: address(34),
@@ -218,7 +231,9 @@ export async function runCompat(
 		protocolOwed: 0n,
 		creatorOwed: U64_MAX,
 		platformConfig,
-		reserved: new Uint8Array(64).fill(3),
+		creatorFeeMode: 1,
+		creatorFeeBps: 10,
+		reserved: new Uint8Array(256).fill(3),
 	};
 	const stakingConfigArgs = {
 		version: 1,

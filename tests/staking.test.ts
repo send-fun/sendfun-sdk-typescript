@@ -278,6 +278,38 @@ function accountValue(owner: Address, data: Uint8Array) {
 	};
 }
 
+// Answers every address with one dusted account, through kit's own transport.
+// With `position`, `getAccountInfo` returns a nexus-owned account with that data.
+function rpcReturning(owner: Address, data: Uint8Array, position?: Uint8Array) {
+	const value = accountValue(owner, data);
+	const singleValue =
+		position === undefined
+			? value
+			: accountValue(SEND_NEXUS_PROGRAM_ADDRESS, position);
+	const transport = <TResponse>(
+		config: Readonly<{ payload: unknown }>,
+	): Promise<TResponse> => {
+		assert.ok(isRpcCall(config.payload));
+		const { method, params } = config.payload;
+		const context = { slot: 0n };
+		let result;
+		if (method === 'getMultipleAccounts') {
+			const [addresses] = params;
+			assert.ok(Array.isArray(addresses));
+			result = { context, value: addresses.map(() => value) };
+		} else {
+			assert.equal(method, 'getAccountInfo');
+			result = { context, value: singleValue };
+		}
+		const response = { id: 1, jsonrpc: '2.0', result };
+		// RpcTransport is generic over the caller's response type, so a stub
+		// asserts once; the api validates it.
+		// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- see above
+		return Promise.resolve(response as TResponse);
+	};
+	return createSolanaRpcFromTransport(transport);
+}
+
 // A dusted, uncreated PDA is system-owned with no data. Fetch helpers must read
 // it as missing and not throw.
 describe('an uncreated PDA someone sent lamports to', () => {
@@ -297,42 +329,6 @@ describe('an uncreated PDA someone sent lamports to', () => {
 			programAddress,
 			space: 0n,
 		} satisfies EncodedAccount;
-	}
-
-	// Answers every address with one dusted account, through kit's own transport.
-	// With `position`, `getAccountInfo` returns a nexus-owned account with that data.
-	function rpcReturning(
-		owner: Address,
-		data: Uint8Array,
-		position?: Uint8Array,
-	) {
-		const value = accountValue(owner, data);
-		const singleValue =
-			position === undefined
-				? value
-				: accountValue(SEND_NEXUS_PROGRAM_ADDRESS, position);
-		const transport = <TResponse>(
-			config: Readonly<{ payload: unknown }>,
-		): Promise<TResponse> => {
-			assert.ok(isRpcCall(config.payload));
-			const { method, params } = config.payload;
-			const context = { slot: 0n };
-			let result;
-			if (method === 'getMultipleAccounts') {
-				const [addresses] = params;
-				assert.ok(Array.isArray(addresses));
-				result = { context, value: addresses.map(() => value) };
-			} else {
-				assert.equal(method, 'getAccountInfo');
-				result = { context, value: singleValue };
-			}
-			const response = { id: 1, jsonrpc: '2.0', result };
-			// RpcTransport is generic over the caller's response type, so a stub
-			// asserts once; the api validates it.
-			// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- see above
-			return Promise.resolve(response as TResponse);
-		};
-		return createSolanaRpcFromTransport(transport);
 	}
 
 	it('fetches as missing rather than throwing', async () => {
@@ -403,7 +399,7 @@ describe('an uncreated PDA someone sent lamports to', () => {
 				amount: 1_000n,
 				stakeVersion: 0,
 				settledCount: 0,
-				reserved: new Uint8Array(32),
+				reserved: new Uint8Array(128),
 			}),
 		);
 		const rpc = rpcReturning(SYSTEM_PROGRAM, new Uint8Array(0), position);

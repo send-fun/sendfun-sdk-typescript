@@ -28,18 +28,21 @@ export async function fetchPartnerFees(
 	return maybeAccount.data;
 }
 
-/** Returns the `feeBps` a trade pays: the standard rate plus the decay premium. `schedule` is the
- *  `PartnerConfig`'s `launchpad` for a curve or `dex` for a pool. `createdAt` is the curve's or
- *  pool's `createdAt`. Both times are in unix seconds. */
+/** Returns the `feeBps` a trade pays: the standard rate plus the decay premium. The standard rate
+ *  is the protocol and LP rates of `schedule` plus `creatorFeeBps`. `schedule` is the
+ *  `PartnerConfig`'s `launchpad` for a curve or `dex` for a pool. `creatorFeeBps` and `createdAt`
+ *  are the curve's or pool's. `schedule.maxCreatorFeeBps` has no effect. `createdAt` and `now`
+ *  are in unix seconds. */
 export function effectiveFeeBps(
 	schedule: LaunchpadFees | DexFees,
 	createdAt: bigint,
 	now: bigint,
+	creatorFeeBps: number,
 ): number {
 	const standardFeeBps =
 		schedule.protocolFeeBps +
-		schedule.creatorFeeBps +
-		('lpFeeBps' in schedule ? schedule.lpFeeBps : 0);
+		('lpFeeBps' in schedule ? schedule.lpFeeBps : 0) +
+		creatorFeeBps;
 	const premium = calculateFeeDecayPremium({
 		currentTimestamp: now,
 		createdAtTimestamp: createdAt,

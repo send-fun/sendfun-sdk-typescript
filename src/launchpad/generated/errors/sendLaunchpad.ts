@@ -70,12 +70,16 @@ export const SEND_LAUNCHPAD_ERROR__USER_TOKEN_ACCOUNT_WRONG_MINT = 0x1b61; // 70
 export const SEND_LAUNCHPAD_ERROR__USER_TOKEN_ACCOUNT_WRONG_AUTHORITY = 0x1b62; // 7010
 /** NothingToClaim: Nothing to claim */
 export const SEND_LAUNCHPAD_ERROR__NOTHING_TO_CLAIM = 0x1b63; // 7011
-/** InvalidCreatorId: Creator identity is not a decodable wallet address */
-export const SEND_LAUNCHPAD_ERROR__INVALID_CREATOR_ID = 0x1b64; // 7012
+/** Unused7012: Unused */
+export const SEND_LAUNCHPAD_ERROR__UNUSED7012 = 0x1b64; // 7012
 /** QuoteMintPriceUnset: Quote mint has no USDC price on its nexus reward state */
 export const SEND_LAUNCHPAD_ERROR__QUOTE_MINT_PRICE_UNSET = 0x1b65; // 7013
 /** TransferFeeNotSettleable: Token-2022 transfer fee schedule cannot settle the exact amount */
 export const SEND_LAUNCHPAD_ERROR__TRANSFER_FEE_NOT_SETTLEABLE = 0x1b66; // 7014
+/** CreatorFeeTooHigh: Creator fee exceeds the partner's maximum */
+export const SEND_LAUNCHPAD_ERROR__CREATOR_FEE_TOO_HIGH = 0x1b67; // 7015
+/** CreatorFeeModeNotAllowed: Creator fee mode is not allowed by the partner config */
+export const SEND_LAUNCHPAD_ERROR__CREATOR_FEE_MODE_NOT_ALLOWED = 0x1b68; // 7016
 /** InsufficientLiquidity: Insufficient liquidity */
 export const SEND_LAUNCHPAD_ERROR__INSUFFICIENT_LIQUIDITY = 0x1bbc; // 7100
 /** InvalidAmount: Invalid amount */
@@ -86,6 +90,8 @@ export type SendLaunchpadError =
 	| typeof SEND_LAUNCHPAD_ERROR__ARITHMETIC_OVERFLOW
 	| typeof SEND_LAUNCHPAD_ERROR__BASE_MINT_NOT_FOUND
 	| typeof SEND_LAUNCHPAD_ERROR__BLOCKED_BY_HELD_SUPPLY
+	| typeof SEND_LAUNCHPAD_ERROR__CREATOR_FEE_MODE_NOT_ALLOWED
+	| typeof SEND_LAUNCHPAD_ERROR__CREATOR_FEE_TOO_HIGH
 	| typeof SEND_LAUNCHPAD_ERROR__CURVE_IS_LIVE
 	| typeof SEND_LAUNCHPAD_ERROR__INSUFFICIENT_BALANCE
 	| typeof SEND_LAUNCHPAD_ERROR__INSUFFICIENT_LIQUIDITY
@@ -93,7 +99,6 @@ export type SendLaunchpadError =
 	| typeof SEND_LAUNCHPAD_ERROR__INVALID_AUTHORITY
 	| typeof SEND_LAUNCHPAD_ERROR__INVALID_BASE_MINT
 	| typeof SEND_LAUNCHPAD_ERROR__INVALID_COIN_CREATOR
-	| typeof SEND_LAUNCHPAD_ERROR__INVALID_CREATOR_ID
 	| typeof SEND_LAUNCHPAD_ERROR__INVALID_PYTH_ACCOUNT
 	| typeof SEND_LAUNCHPAD_ERROR__INVALID_PYTH_FEED
 	| typeof SEND_LAUNCHPAD_ERROR__INVALID_QUOTE_MINT
@@ -111,6 +116,7 @@ export type SendLaunchpadError =
 	| typeof SEND_LAUNCHPAD_ERROR__TOKEN_CREATION_DISABLED
 	| typeof SEND_LAUNCHPAD_ERROR__TRANSFER_FEE_NOT_SETTLEABLE
 	| typeof SEND_LAUNCHPAD_ERROR__UNAUTHORIZED
+	| typeof SEND_LAUNCHPAD_ERROR__UNUSED7012
 	| typeof SEND_LAUNCHPAD_ERROR__USER_TOKEN_ACCOUNT_INVALID
 	| typeof SEND_LAUNCHPAD_ERROR__USER_TOKEN_ACCOUNT_WRONG_AUTHORITY
 	| typeof SEND_LAUNCHPAD_ERROR__USER_TOKEN_ACCOUNT_WRONG_MINT
@@ -121,6 +127,8 @@ export const sendLaunchpadErrorMessages: Record<SendLaunchpadError, string> = {
 	[SEND_LAUNCHPAD_ERROR__ARITHMETIC_OVERFLOW]: `Arithmetic overflow`,
 	[SEND_LAUNCHPAD_ERROR__BASE_MINT_NOT_FOUND]: `Base mint not found`,
 	[SEND_LAUNCHPAD_ERROR__BLOCKED_BY_HELD_SUPPLY]: `Blocked by held supply`,
+	[SEND_LAUNCHPAD_ERROR__CREATOR_FEE_MODE_NOT_ALLOWED]: `Creator fee mode is not allowed by the partner config`,
+	[SEND_LAUNCHPAD_ERROR__CREATOR_FEE_TOO_HIGH]: `Creator fee exceeds the partner's maximum`,
 	[SEND_LAUNCHPAD_ERROR__CURVE_IS_LIVE]: `Curve is live`,
 	[SEND_LAUNCHPAD_ERROR__INSUFFICIENT_BALANCE]: `Insufficient balance in source account`,
 	[SEND_LAUNCHPAD_ERROR__INSUFFICIENT_LIQUIDITY]: `Insufficient liquidity`,
@@ -128,7 +136,6 @@ export const sendLaunchpadErrorMessages: Record<SendLaunchpadError, string> = {
 	[SEND_LAUNCHPAD_ERROR__INVALID_AUTHORITY]: `Invalid authority`,
 	[SEND_LAUNCHPAD_ERROR__INVALID_BASE_MINT]: `Invalid base mint`,
 	[SEND_LAUNCHPAD_ERROR__INVALID_COIN_CREATOR]: `Invalid coin creator`,
-	[SEND_LAUNCHPAD_ERROR__INVALID_CREATOR_ID]: `Creator identity is not a decodable wallet address`,
 	[SEND_LAUNCHPAD_ERROR__INVALID_PYTH_ACCOUNT]: `Invalid Pyth price account`,
 	[SEND_LAUNCHPAD_ERROR__INVALID_PYTH_FEED]: `Invalid Pyth feed ID`,
 	[SEND_LAUNCHPAD_ERROR__INVALID_QUOTE_MINT]: `Invalid quote mint`,
@@ -146,6 +153,7 @@ export const sendLaunchpadErrorMessages: Record<SendLaunchpadError, string> = {
 	[SEND_LAUNCHPAD_ERROR__TOKEN_CREATION_DISABLED]: `Token creation is disabled`,
 	[SEND_LAUNCHPAD_ERROR__TRANSFER_FEE_NOT_SETTLEABLE]: `Token-2022 transfer fee schedule cannot settle the exact amount`,
 	[SEND_LAUNCHPAD_ERROR__UNAUTHORIZED]: `Unauthorized`,
+	[SEND_LAUNCHPAD_ERROR__UNUSED7012]: `Unused`,
 	[SEND_LAUNCHPAD_ERROR__USER_TOKEN_ACCOUNT_INVALID]: `User token account is not an initialized token account`,
 	[SEND_LAUNCHPAD_ERROR__USER_TOKEN_ACCOUNT_WRONG_AUTHORITY]: `User token account is not owned by the trading user`,
 	[SEND_LAUNCHPAD_ERROR__USER_TOKEN_ACCOUNT_WRONG_MINT]: `User token account mint does not match the trade`,

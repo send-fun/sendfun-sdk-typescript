@@ -13,7 +13,6 @@ import {
 } from '@solana/kit';
 import { SEND_NEXUS_PROGRAM_ADDRESS } from '../programs/index.js';
 import { ALT_REGISTRY_DISCRIMINATOR } from './altRegistry.js';
-import { CREATOR_FEE_CONFIG_DISCRIMINATOR } from './creatorFeeConfig.js';
 import { FEE_PRESET_DISCRIMINATOR } from './feePreset.js';
 import { GLOBAL_CONFIG_DISCRIMINATOR } from './globalConfig.js';
 import { PARTNER_CONFIG_DISCRIMINATOR } from './partnerConfig.js';
@@ -26,7 +25,6 @@ import { USER_STAKE_POSITION_DISCRIMINATOR } from './userStakePosition.js';
 /** Account kinds of the sendNexus program. */
 export type SendNexusAccountType =
 	| 'altRegistry'
-	| 'creatorFeeConfig'
 	| 'feePreset'
 	| 'globalConfig'
 	| 'partnerConfig'
@@ -53,9 +51,6 @@ export function identifySendNexusAccount(
 	const data = 'data' in account ? account.data : account;
 	if (containsBytes(data, ALT_REGISTRY_DISCRIMINATOR, 0)) {
 		return 'altRegistry';
-	}
-	if (containsBytes(data, CREATOR_FEE_CONFIG_DISCRIMINATOR, 0)) {
-		return 'creatorFeeConfig';
 	}
 	if (containsBytes(data, FEE_PRESET_DISCRIMINATOR, 0)) {
 		return 'feePreset';

@@ -7,6 +7,7 @@
  */
 
 export * from './bondingCurve.js';
+export * from './creatorFeeConfig.js';
 export * from './eventAuthority.js';
 export * from './globalConfig.js';
 export * from './migrationAuthority.js';

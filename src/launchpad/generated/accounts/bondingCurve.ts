@@ -18,12 +18,16 @@ import {
 	fixEncoderSize,
 	getAddressDecoder,
 	getAddressEncoder,
+	getArrayDecoder,
+	getArrayEncoder,
 	getBytesDecoder,
 	getBytesEncoder,
 	getI64Decoder,
 	getI64Encoder,
 	getStructDecoder,
 	getStructEncoder,
+	getU16Decoder,
+	getU16Encoder,
 	getU64Decoder,
 	getU64Encoder,
 	getU8Decoder,
@@ -74,7 +78,7 @@ export type BondingCurve = {
 	quoteMint: Address;
 	quoteDecimals: number;
 	coinCreator: Address;
-	creatorFeeConfig: Address;
+	padding0: Array<bigint>;
 	partner: Address;
 	baseVault: Address;
 	quoteVault: Address;
@@ -86,6 +90,9 @@ export type BondingCurve = {
 	protocolOwed: bigint;
 	creatorOwed: bigint;
 	platformConfig: Address;
+	creatorFeeMode: number;
+	creatorFeeBps: number;
+	dexCreatorFeeBps: number;
 	reserved: ReadonlyUint8Array;
 };
 
@@ -102,7 +109,7 @@ export type BondingCurveArgs = {
 	quoteMint: Address;
 	quoteDecimals: number;
 	coinCreator: Address;
-	creatorFeeConfig: Address;
+	padding0: Array<number | bigint>;
 	partner: Address;
 	baseVault: Address;
 	quoteVault: Address;
@@ -114,6 +121,9 @@ export type BondingCurveArgs = {
 	protocolOwed: number | bigint;
 	creatorOwed: number | bigint;
 	platformConfig: Address;
+	creatorFeeMode: number;
+	creatorFeeBps: number;
+	dexCreatorFeeBps: number;
 	reserved: ReadonlyUint8Array;
 };
 
@@ -134,7 +144,7 @@ export function getBondingCurveEncoder(): FixedSizeEncoder<BondingCurveArgs> {
 			['quoteMint', getAddressEncoder()],
 			['quoteDecimals', getU8Encoder()],
 			['coinCreator', getAddressEncoder()],
-			['creatorFeeConfig', getAddressEncoder()],
+			['padding0', getArrayEncoder(getU64Encoder(), { size: 4 })],
 			['partner', getAddressEncoder()],
 			['baseVault', getAddressEncoder()],
 			['quoteVault', getAddressEncoder()],
@@ -146,7 +156,10 @@ export function getBondingCurveEncoder(): FixedSizeEncoder<BondingCurveArgs> {
 			['protocolOwed', getU64Encoder()],
 			['creatorOwed', getU64Encoder()],
 			['platformConfig', getAddressEncoder()],
-			['reserved', fixEncoderSize(getBytesEncoder(), 64)],
+			['creatorFeeMode', getU8Encoder()],
+			['creatorFeeBps', getU16Encoder()],
+			['dexCreatorFeeBps', getU16Encoder()],
+			['reserved', fixEncoderSize(getBytesEncoder(), 256)],
 		]),
 		(value) => ({ ...value, discriminator: BONDING_CURVE_DISCRIMINATOR }),
 	);
@@ -168,7 +181,7 @@ export function getBondingCurveDecoder(): FixedSizeDecoder<BondingCurve> {
 		['quoteMint', getAddressDecoder()],
 		['quoteDecimals', getU8Decoder()],
 		['coinCreator', getAddressDecoder()],
-		['creatorFeeConfig', getAddressDecoder()],
+		['padding0', getArrayDecoder(getU64Decoder(), { size: 4 })],
 		['partner', getAddressDecoder()],
 		['baseVault', getAddressDecoder()],
 		['quoteVault', getAddressDecoder()],
@@ -180,7 +193,10 @@ export function getBondingCurveDecoder(): FixedSizeDecoder<BondingCurve> {
 		['protocolOwed', getU64Decoder()],
 		['creatorOwed', getU64Decoder()],
 		['platformConfig', getAddressDecoder()],
-		['reserved', fixDecoderSize(getBytesDecoder(), 64)],
+		['creatorFeeMode', getU8Decoder()],
+		['creatorFeeBps', getU16Decoder()],
+		['dexCreatorFeeBps', getU16Decoder()],
+		['reserved', fixDecoderSize(getBytesDecoder(), 256)],
 	]);
 }
 
@@ -306,5 +322,5 @@ export async function fetchAllMaybeBondingCurve(
 }
 
 export function getBondingCurveSize(): number {
-	return 421;
+	return 618;
 }

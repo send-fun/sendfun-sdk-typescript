@@ -23,11 +23,9 @@ import {
 } from '@solana/kit/program-client-core';
 import {
 	fetchAllAltRegistry,
-	fetchAllCreatorFeeConfig,
 	fetchAllFeePreset,
 	fetchAllGlobalConfig,
 	fetchAllMaybeAltRegistry,
-	fetchAllMaybeCreatorFeeConfig,
 	fetchAllMaybeFeePreset,
 	fetchAllMaybeGlobalConfig,
 	fetchAllMaybePartnerConfig,
@@ -43,11 +41,9 @@ import {
 	fetchAllUserRewardDebt,
 	fetchAllUserStakePosition,
 	fetchAltRegistry,
-	fetchCreatorFeeConfig,
 	fetchFeePreset,
 	fetchGlobalConfig,
 	fetchMaybeAltRegistry,
-	fetchMaybeCreatorFeeConfig,
 	fetchMaybeFeePreset,
 	fetchMaybeGlobalConfig,
 	fetchMaybePartnerConfig,
@@ -63,7 +59,6 @@ import {
 	fetchUserRewardDebt,
 	fetchUserStakePosition,
 	getAltRegistryCodec,
-	getCreatorFeeConfigCodec,
 	getFeePresetCodec,
 	getGlobalConfigCodec,
 	getPartnerConfigCodec,
@@ -75,8 +70,6 @@ import {
 	identifySendNexusAccount,
 	type AltRegistry,
 	type AltRegistryArgs,
-	type CreatorFeeConfig,
-	type CreatorFeeConfigArgs,
 	type FeePreset,
 	type FeePresetArgs,
 	type GlobalConfig,
@@ -115,7 +108,6 @@ import {
 } from '../instructions/index.js';
 import {
 	findAltRegistryPda,
-	findCreatorFeeConfigPda,
 	findDefaultFeePresetPda,
 	findDefaultPartnerMetadataPda,
 	findDefaultPartnerPda,
@@ -143,8 +135,6 @@ export type SendNexusPlugin = {
 export type SendNexusPluginAccounts = {
 	altRegistry: ReturnType<typeof getAltRegistryCodec> &
 		SelfFetchFunctions<AltRegistryArgs, AltRegistry>;
-	creatorFeeConfig: ReturnType<typeof getCreatorFeeConfigCodec> &
-		SelfFetchFunctions<CreatorFeeConfigArgs, CreatorFeeConfig>;
 	feePreset: ReturnType<typeof getFeePresetCodec> &
 		SelfFetchFunctions<FeePresetArgs, FeePreset>;
 	globalConfig: ReturnType<typeof getGlobalConfigCodec> &
@@ -203,7 +193,6 @@ export type SendNexusPluginPdas = {
 	userStakePosition: typeof findUserStakePositionPda;
 	userRewardDebt: typeof findUserRewardDebtPda;
 	eventAuthority: typeof findEventAuthorityPda;
-	creatorFeeConfig: typeof findCreatorFeeConfigPda;
 	altRegistry: typeof findAltRegistryPda;
 };
 
@@ -235,29 +224,6 @@ export function sendNexusProgram() {
 							),
 						fetchMaybe: (address, config) =>
 							fetchMaybeAltRegistry(client.rpc, address, config),
-					}),
-					creatorFeeConfig: Object.freeze({
-						...getCreatorFeeConfigCodec(),
-						fetch: (address, config) =>
-							fetchCreatorFeeConfig(client.rpc, address, config),
-						fetchAll: (addresses, config) =>
-							fetchAllCreatorFeeConfig(
-								client.rpc,
-								addresses,
-								config,
-							),
-						fetchAllMaybe: (addresses, config) =>
-							fetchAllMaybeCreatorFeeConfig(
-								client.rpc,
-								addresses,
-								config,
-							),
-						fetchMaybe: (address, config) =>
-							fetchMaybeCreatorFeeConfig(
-								client.rpc,
-								address,
-								config,
-							),
 					}),
 					feePreset: Object.freeze({
 						...getFeePresetCodec(),
@@ -480,7 +446,6 @@ export function sendNexusProgram() {
 					userStakePosition: findUserStakePositionPda,
 					userRewardDebt: findUserRewardDebtPda,
 					eventAuthority: findEventAuthorityPda,
-					creatorFeeConfig: findCreatorFeeConfigPda,
 					altRegistry: findAltRegistryPda,
 				},
 				identifyAccount: identifySendNexusAccount,

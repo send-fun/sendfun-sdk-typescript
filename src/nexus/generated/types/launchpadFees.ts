@@ -22,7 +22,7 @@ import {
 export type LaunchpadFees = {
 	creationFeeCents: bigint;
 	protocolFeeBps: number;
-	creatorFeeBps: number;
+	maxCreatorFeeBps: number;
 	feeDecaySeconds: number;
 	feeDecayStartBps: number;
 };
@@ -30,7 +30,7 @@ export type LaunchpadFees = {
 export type LaunchpadFeesArgs = {
 	creationFeeCents: number | bigint;
 	protocolFeeBps: number;
-	creatorFeeBps: number;
+	maxCreatorFeeBps: number;
 	feeDecaySeconds: number;
 	feeDecayStartBps: number;
 };
@@ -39,7 +39,7 @@ export function getLaunchpadFeesEncoder(): FixedSizeEncoder<LaunchpadFeesArgs> {
 	return getStructEncoder([
 		['creationFeeCents', getU64Encoder()],
 		['protocolFeeBps', getU16Encoder()],
-		['creatorFeeBps', getU16Encoder()],
+		['maxCreatorFeeBps', getU16Encoder()],
 		['feeDecaySeconds', getU16Encoder()],
 		['feeDecayStartBps', getU16Encoder()],
 	]);
@@ -49,7 +49,7 @@ export function getLaunchpadFeesDecoder(): FixedSizeDecoder<LaunchpadFees> {
 	return getStructDecoder([
 		['creationFeeCents', getU64Decoder()],
 		['protocolFeeBps', getU16Decoder()],
-		['creatorFeeBps', getU16Decoder()],
+		['maxCreatorFeeBps', getU16Decoder()],
 		['feeDecaySeconds', getU16Decoder()],
 		['feeDecayStartBps', getU16Decoder()],
 	]);

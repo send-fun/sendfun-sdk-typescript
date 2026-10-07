@@ -10,6 +10,7 @@ import {
 	containsBytes,
 	fixEncoderSize,
 	getAddressDecoder,
+	getArrayDecoder,
 	getBooleanDecoder,
 	getBytesEncoder,
 	getI64Decoder,
@@ -37,7 +38,7 @@ export type CompleteEvent = {
 	baseMint: Address;
 	quoteMint: Address;
 	coinCreator: Address;
-	creatorFeeConfig: Address;
+	padding0: Array<bigint>;
 	platformConfig: Address;
 	curvePartner: Address;
 	isPartner: boolean;
@@ -53,7 +54,7 @@ export function getCompleteEventDecoder(): FixedSizeDecoder<CompleteEvent> {
 		['baseMint', getAddressDecoder()],
 		['quoteMint', getAddressDecoder()],
 		['coinCreator', getAddressDecoder()],
-		['creatorFeeConfig', getAddressDecoder()],
+		['padding0', getArrayDecoder(getU64Decoder(), { size: 4 })],
 		['platformConfig', getAddressDecoder()],
 		['curvePartner', getAddressDecoder()],
 		['isPartner', getBooleanDecoder()],

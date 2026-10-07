@@ -90,7 +90,7 @@ export function getUserStakePositionEncoder(): FixedSizeEncoder<UserStakePositio
 			['amount', getU64Encoder()],
 			['stakeVersion', getU32Encoder()],
 			['settledCount', getU16Encoder()],
-			['reserved', fixEncoderSize(getBytesEncoder(), 32)],
+			['reserved', fixEncoderSize(getBytesEncoder(), 128)],
 		]),
 		(value) => ({
 			...value,
@@ -110,7 +110,7 @@ export function getUserStakePositionDecoder(): FixedSizeDecoder<UserStakePositio
 		['amount', getU64Decoder()],
 		['stakeVersion', getU32Decoder()],
 		['settledCount', getU16Decoder()],
-		['reserved', fixDecoderSize(getBytesDecoder(), 32)],
+		['reserved', fixDecoderSize(getBytesDecoder(), 128)],
 	]);
 }
 
@@ -251,5 +251,5 @@ export async function fetchAllMaybeUserStakePosition(
 }
 
 export function getUserStakePositionSize(): number {
-	return 120;
+	return 216;
 }

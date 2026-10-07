@@ -22,8 +22,12 @@ import {
 	getProgramDerivedAddress,
 	getStructDecoder,
 	getStructEncoder,
+	getU16Decoder,
+	getU16Encoder,
 	getU32Decoder,
 	getU32Encoder,
+	getU8Decoder,
+	getU8Encoder,
 	getUtf8Decoder,
 	getUtf8Encoder,
 	SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
@@ -54,6 +58,7 @@ import {
 import {
 	EVENT_AUTHORITY_PDA_ADDRESS,
 	findBondingCurvePda,
+	findCreatorFeeConfigPda,
 	findRewardAccrualPda,
 	GLOBAL_CONFIG_PDA_ADDRESS,
 	WSOL_REWARD_ACCRUAL_PDA_ADDRESS,
@@ -212,22 +217,22 @@ export type CreateTokenInstruction<
 export type CreateTokenInstructionData = {
 	discriminator: ReadonlyUint8Array;
 	platformConfig: Address;
-	creatorPlatform: string;
-	creatorId: string;
-	creatorHash: Address;
 	name: string;
 	symbol: string;
 	uri: string;
+	creatorFeeMode: number;
+	creatorFeeBps: number;
+	dexCreatorFeeBps: number;
 };
 
 export type CreateTokenInstructionDataArgs = {
 	platformConfig: Address;
-	creatorPlatform: string;
-	creatorId: string;
-	creatorHash: Address;
 	name: string;
 	symbol: string;
 	uri: string;
+	creatorFeeMode: number;
+	creatorFeeBps: number;
+	dexCreatorFeeBps: number;
 };
 
 export function getCreateTokenInstructionDataEncoder(): Encoder<CreateTokenInstructionDataArgs> {
@@ -235,18 +240,12 @@ export function getCreateTokenInstructionDataEncoder(): Encoder<CreateTokenInstr
 		getStructEncoder([
 			['discriminator', fixEncoderSize(getBytesEncoder(), 8)],
 			['platformConfig', getAddressEncoder()],
-			[
-				'creatorPlatform',
-				addEncoderSizePrefix(getUtf8Encoder(), getU32Encoder()),
-			],
-			[
-				'creatorId',
-				addEncoderSizePrefix(getUtf8Encoder(), getU32Encoder()),
-			],
-			['creatorHash', getAddressEncoder()],
 			['name', addEncoderSizePrefix(getUtf8Encoder(), getU32Encoder())],
 			['symbol', addEncoderSizePrefix(getUtf8Encoder(), getU32Encoder())],
 			['uri', addEncoderSizePrefix(getUtf8Encoder(), getU32Encoder())],
+			['creatorFeeMode', getU8Encoder()],
+			['creatorFeeBps', getU16Encoder()],
+			['dexCreatorFeeBps', getU16Encoder()],
 		]),
 		(value) => ({ ...value, discriminator: CREATE_TOKEN_DISCRIMINATOR }),
 	);
@@ -256,15 +255,12 @@ export function getCreateTokenInstructionDataDecoder(): Decoder<CreateTokenInstr
 	return getStructDecoder([
 		['discriminator', fixDecoderSize(getBytesDecoder(), 8)],
 		['platformConfig', getAddressDecoder()],
-		[
-			'creatorPlatform',
-			addDecoderSizePrefix(getUtf8Decoder(), getU32Decoder()),
-		],
-		['creatorId', addDecoderSizePrefix(getUtf8Decoder(), getU32Decoder())],
-		['creatorHash', getAddressDecoder()],
 		['name', addDecoderSizePrefix(getUtf8Decoder(), getU32Decoder())],
 		['symbol', addDecoderSizePrefix(getUtf8Decoder(), getU32Decoder())],
 		['uri', addDecoderSizePrefix(getUtf8Decoder(), getU32Decoder())],
+		['creatorFeeMode', getU8Decoder()],
+		['creatorFeeBps', getU16Decoder()],
+		['dexCreatorFeeBps', getU16Decoder()],
 	]);
 }
 
@@ -314,12 +310,12 @@ export type CreateTokenAsyncInput<
 	stakingVault?: Address<TAccountStakingVault>;
 	quoteTokenProgram: Address<TAccountQuoteTokenProgram>;
 	platformConfig: CreateTokenInstructionDataArgs['platformConfig'];
-	creatorPlatform: CreateTokenInstructionDataArgs['creatorPlatform'];
-	creatorId: CreateTokenInstructionDataArgs['creatorId'];
-	creatorHash: CreateTokenInstructionDataArgs['creatorHash'];
 	name: CreateTokenInstructionDataArgs['name'];
 	symbol: CreateTokenInstructionDataArgs['symbol'];
 	uri: CreateTokenInstructionDataArgs['uri'];
+	creatorFeeMode: CreateTokenInstructionDataArgs['creatorFeeMode'];
+	creatorFeeBps: CreateTokenInstructionDataArgs['creatorFeeBps'];
+	dexCreatorFeeBps: CreateTokenInstructionDataArgs['dexCreatorFeeBps'];
 };
 
 export async function getCreateTokenInstructionAsync<
@@ -517,29 +513,15 @@ export async function getCreateTokenInstructionAsync<
 		});
 	}
 	if (!accounts.creatorFeeConfig.value) {
-		accounts.creatorFeeConfig.value = await getProgramDerivedAddress({
-			programAddress:
-				'7rrCurqdWFesbzwtYPo95fM8waTtVXgXwCom45x1sfNX' as Address<'7rrCurqdWFesbzwtYPo95fM8waTtVXgXwCom45x1sfNX'>,
-			seeds: [
-				getBytesEncoder().encode(
-					new Uint8Array([
-						99, 114, 101, 97, 116, 111, 114, 95, 102, 101, 101, 95,
-						98, 97, 108, 97, 110, 99, 101,
-					]),
-				),
-				getAddressEncoder().encode(
-					getNonNullResolvedInstructionInput(
-						'creatorHash',
-						args.creatorHash,
-					),
-				),
-				getAddressEncoder().encode(
-					getAddressFromResolvedInstructionAccount(
-						'quoteMint',
-						accounts.quoteMint.value,
-					),
-				),
-			],
+		accounts.creatorFeeConfig.value = await findCreatorFeeConfigPda({
+			baseMint: getAddressFromResolvedInstructionAccount(
+				'baseMint',
+				accounts.baseMint.value,
+			),
+			quoteMint: getAddressFromResolvedInstructionAccount(
+				'quoteMint',
+				accounts.quoteMint.value,
+			),
 		});
 	}
 	if (!accounts.nexusProgram.value) {
@@ -780,12 +762,12 @@ export type CreateTokenInput<
 	stakingVault: Address<TAccountStakingVault>;
 	quoteTokenProgram: Address<TAccountQuoteTokenProgram>;
 	platformConfig: CreateTokenInstructionDataArgs['platformConfig'];
-	creatorPlatform: CreateTokenInstructionDataArgs['creatorPlatform'];
-	creatorId: CreateTokenInstructionDataArgs['creatorId'];
-	creatorHash: CreateTokenInstructionDataArgs['creatorHash'];
 	name: CreateTokenInstructionDataArgs['name'];
 	symbol: CreateTokenInstructionDataArgs['symbol'];
 	uri: CreateTokenInstructionDataArgs['uri'];
+	creatorFeeMode: CreateTokenInstructionDataArgs['creatorFeeMode'];
+	creatorFeeBps: CreateTokenInstructionDataArgs['creatorFeeBps'];
+	dexCreatorFeeBps: CreateTokenInstructionDataArgs['dexCreatorFeeBps'];
 };
 
 export function getCreateTokenInstruction<

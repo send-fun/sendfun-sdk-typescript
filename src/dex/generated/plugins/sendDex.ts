@@ -70,6 +70,7 @@ import {
 	type SellExactOutAsyncInput,
 } from '../instructions/index.js';
 import {
+	findCreatorFeeConfigPda,
 	findEventAuthorityPda,
 	findGlobalConfigPda,
 	findLpMintPda,
@@ -135,6 +136,7 @@ export type SendDexPluginInstructions = {
 export type SendDexPluginPdas = {
 	pool: typeof findPoolPda;
 	eventAuthority: typeof findEventAuthorityPda;
+	creatorFeeConfig: typeof findCreatorFeeConfigPda;
 	rewardAccrual: typeof findRewardAccrualPda;
 	globalConfig: typeof findGlobalConfigPda;
 	lpMint: typeof findLpMintPda;
@@ -266,6 +268,7 @@ export function sendDexProgram() {
 				pdas: {
 					pool: findPoolPda,
 					eventAuthority: findEventAuthorityPda,
+					creatorFeeConfig: findCreatorFeeConfigPda,
 					rewardAccrual: findRewardAccrualPda,
 					globalConfig: findGlobalConfigPda,
 					lpMint: findLpMintPda,

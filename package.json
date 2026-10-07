@@ -1,6 +1,6 @@
 {
 	"name": "@send-fun/sdk",
-	"version": "1.2.0",
+	"version": "2.0.0",
 	"description": "Kit-native TypeScript SDK for send.fun",
 	"keywords": [
 		"dex",
@@ -59,18 +59,18 @@
 		"format:check": "oxfmt --check",
 		"prepublishOnly": "pnpm run build",
 		"test": "tsx --test 'tests/**/*.test.ts'",
-		"typecheck": "tsgo && tsgo -p compat/tsconfig.json"
+		"typecheck": "tsc && tsc -p compat/tsconfig.json"
 	},
 	"dependencies": {},
 	"devDependencies": {
 		"@solana-program/token-2022": "^0.9.0",
 		"@solana/kit": "6.10.0",
-		"@types/node": "^24.10.4",
-		"@typescript/native-preview": "7.0.0-dev.20260512.1",
-		"oxfmt": "^0.49.0",
+		"@types/node": "^24.13.6",
+		"@typescript/native": "npm:typescript@^7.0.2",
+		"oxfmt": "^0.70.0",
 		"tsdown": "^0.23.0",
-		"tsx": "^4.21.0",
-		"typescript": "^6.0.3"
+		"tsx": "^4.23.15",
+		"typescript": "npm:@typescript/typescript6@^6.0.2"
 	},
 	"peerDependencies": {
 		"@solana/kit": "^6.10.0 || ^7.0.0 || ^8.0.0"

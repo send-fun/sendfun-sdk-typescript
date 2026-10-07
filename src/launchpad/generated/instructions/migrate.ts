@@ -45,6 +45,7 @@ import {
 import {
 	EVENT_AUTHORITY_PDA_ADDRESS,
 	findBondingCurvePda,
+	findCreatorFeeConfigPda,
 	MIGRATION_AUTHORITY_PDA_ADDRESS,
 } from '../pdas/index.js';
 import { SEND_LAUNCHPAD_PROGRAM_ADDRESS } from '../programs/index.js';
@@ -90,6 +91,7 @@ export type MigrateInstruction<
 		'FJVebqCthxH6JM8vvkJb7yRYA7Emsib1C1vu4ZePSP3T',
 	TAccountProgram extends string | AccountMeta<string> =
 		'5R1uFyEE4oxqkm7hJDqHq6gXaLVF9dxeF3LF4yz1sfLP',
+	TAccountDexCreatorFeeConfig extends string | AccountMeta<string> = string,
 	TRemainingAccounts extends readonly AccountMeta<string>[] = [],
 > = Instruction<TProgram> &
 	InstructionWithData<ReadonlyUint8Array> &
@@ -142,7 +144,7 @@ export type MigrateInstruction<
 				? ReadonlyAccount<TAccountNexusProgram>
 				: TAccountNexusProgram,
 			TAccountCreatorFeeConfig extends string
-				? ReadonlyAccount<TAccountCreatorFeeConfig>
+				? WritableAccount<TAccountCreatorFeeConfig>
 				: TAccountCreatorFeeConfig,
 			TAccountBaseTokenProgram extends string
 				? ReadonlyAccount<TAccountBaseTokenProgram>
@@ -162,6 +164,9 @@ export type MigrateInstruction<
 			TAccountProgram extends string
 				? ReadonlyAccount<TAccountProgram>
 				: TAccountProgram,
+			TAccountDexCreatorFeeConfig extends string
+				? WritableAccount<TAccountDexCreatorFeeConfig>
+				: TAccountDexCreatorFeeConfig,
 			...TRemainingAccounts,
 		]
 	>;
@@ -209,6 +214,7 @@ export type MigrateAsyncInput<
 	TAccountPoolLpAccount extends string = string,
 	TAccountCreatorFeeConfig extends string = string,
 	TAccountQuoteTokenProgram extends string = string,
+	TAccountDexCreatorFeeConfig extends string = string,
 > = {
 	caller: TransactionSigner<TAccountCaller>;
 	bondingCurve?: Address<TAccountBondingCurve>;
@@ -221,8 +227,9 @@ export type MigrateAsyncInput<
 	poolBaseVault: Address<TAccountPoolBaseVault>;
 	poolQuoteVault: Address<TAccountPoolQuoteVault>;
 	poolLpAccount: Address<TAccountPoolLpAccount>;
-	creatorFeeConfig: Address<TAccountCreatorFeeConfig>;
+	creatorFeeConfig?: Address<TAccountCreatorFeeConfig>;
 	quoteTokenProgram: Address<TAccountQuoteTokenProgram>;
+	dexCreatorFeeConfig?: Address<TAccountDexCreatorFeeConfig>;
 };
 
 export async function getMigrateInstructionAsync<
@@ -239,6 +246,7 @@ export async function getMigrateInstructionAsync<
 	TAccountPoolLpAccount extends string,
 	TAccountCreatorFeeConfig extends string,
 	TAccountQuoteTokenProgram extends string,
+	TAccountDexCreatorFeeConfig extends string,
 >(
 	input: MigrateAsyncInput<
 		TAccountCaller,
@@ -253,7 +261,8 @@ export async function getMigrateInstructionAsync<
 		TAccountPoolQuoteVault,
 		TAccountPoolLpAccount,
 		TAccountCreatorFeeConfig,
-		TAccountQuoteTokenProgram
+		TAccountQuoteTokenProgram,
+		TAccountDexCreatorFeeConfig
 	>,
 ): Promise<
 	MigrateInstruction<
@@ -279,7 +288,8 @@ export async function getMigrateInstructionAsync<
 		'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL',
 		'11111111111111111111111111111111',
 		'FJVebqCthxH6JM8vvkJb7yRYA7Emsib1C1vu4ZePSP3T',
-		'5R1uFyEE4oxqkm7hJDqHq6gXaLVF9dxeF3LF4yz1sfLP'
+		'5R1uFyEE4oxqkm7hJDqHq6gXaLVF9dxeF3LF4yz1sfLP',
+		TAccountDexCreatorFeeConfig
 	>
 > {
 	// Program address.
@@ -307,7 +317,7 @@ export async function getMigrateInstructionAsync<
 		nexusProgram: { value: null, isWritable: false },
 		creatorFeeConfig: {
 			value: input.creatorFeeConfig ?? null,
-			isWritable: false,
+			isWritable: true,
 		},
 		baseTokenProgram: { value: null, isWritable: false },
 		quoteTokenProgram: {
@@ -318,6 +328,10 @@ export async function getMigrateInstructionAsync<
 		systemProgram: { value: null, isWritable: false },
 		eventAuthority: { value: null, isWritable: false },
 		program: { value: null, isWritable: false },
+		dexCreatorFeeConfig: {
+			value: input.dexCreatorFeeConfig ?? null,
+			isWritable: true,
+		},
 	};
 	const accounts = originalAccounts as Record<
 		keyof typeof originalAccounts,
@@ -445,6 +459,18 @@ export async function getMigrateInstructionAsync<
 		accounts.nexusProgram.value =
 			'7rrCurqdWFesbzwtYPo95fM8waTtVXgXwCom45x1sfNX' as Address<'7rrCurqdWFesbzwtYPo95fM8waTtVXgXwCom45x1sfNX'>;
 	}
+	if (!accounts.creatorFeeConfig.value) {
+		accounts.creatorFeeConfig.value = await findCreatorFeeConfigPda({
+			baseMint: getAddressFromResolvedInstructionAccount(
+				'baseMint',
+				accounts.baseMint.value,
+			),
+			quoteMint: getAddressFromResolvedInstructionAccount(
+				'quoteMint',
+				accounts.quoteMint.value,
+			),
+		});
+	}
 	if (!accounts.baseTokenProgram.value) {
 		accounts.baseTokenProgram.value =
 			'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb' as Address<'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'>;
@@ -463,6 +489,32 @@ export async function getMigrateInstructionAsync<
 	if (!accounts.program.value) {
 		accounts.program.value =
 			'5R1uFyEE4oxqkm7hJDqHq6gXaLVF9dxeF3LF4yz1sfLP' as Address<'5R1uFyEE4oxqkm7hJDqHq6gXaLVF9dxeF3LF4yz1sfLP'>;
+	}
+	if (!accounts.dexCreatorFeeConfig.value) {
+		accounts.dexCreatorFeeConfig.value = await getProgramDerivedAddress({
+			programAddress:
+				'84qj5FPZZdXkQy8mfowyg6RBZ3XKuTds6XS4ZYT1sfDX' as Address<'84qj5FPZZdXkQy8mfowyg6RBZ3XKuTds6XS4ZYT1sfDX'>,
+			seeds: [
+				getBytesEncoder().encode(
+					new Uint8Array([
+						99, 114, 101, 97, 116, 111, 114, 95, 102, 101, 101, 95,
+						99, 111, 110, 102, 105, 103,
+					]),
+				),
+				getAddressEncoder().encode(
+					getAddressFromResolvedInstructionAccount(
+						'baseMint',
+						accounts.baseMint.value,
+					),
+				),
+				getAddressEncoder().encode(
+					getAddressFromResolvedInstructionAccount(
+						'quoteMint',
+						accounts.quoteMint.value,
+					),
+				),
+			],
+		});
 	}
 
 	const getAccountMeta = getAccountMetaFactory(programAddress, 'programId');
@@ -493,6 +545,7 @@ export async function getMigrateInstructionAsync<
 			getAccountMeta('systemProgram', accounts.systemProgram),
 			getAccountMeta('eventAuthority', accounts.eventAuthority),
 			getAccountMeta('program', accounts.program),
+			getAccountMeta('dexCreatorFeeConfig', accounts.dexCreatorFeeConfig),
 		],
 		data: getMigrateInstructionDataEncoder().encode({}),
 		programAddress,
@@ -519,7 +572,8 @@ export async function getMigrateInstructionAsync<
 		'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL',
 		'11111111111111111111111111111111',
 		'FJVebqCthxH6JM8vvkJb7yRYA7Emsib1C1vu4ZePSP3T',
-		'5R1uFyEE4oxqkm7hJDqHq6gXaLVF9dxeF3LF4yz1sfLP'
+		'5R1uFyEE4oxqkm7hJDqHq6gXaLVF9dxeF3LF4yz1sfLP',
+		TAccountDexCreatorFeeConfig
 	>);
 }
 
@@ -537,6 +591,7 @@ export type MigrateInput<
 	TAccountPoolLpAccount extends string = string,
 	TAccountCreatorFeeConfig extends string = string,
 	TAccountQuoteTokenProgram extends string = string,
+	TAccountDexCreatorFeeConfig extends string = string,
 > = {
 	caller: TransactionSigner<TAccountCaller>;
 	bondingCurve: Address<TAccountBondingCurve>;
@@ -551,6 +606,7 @@ export type MigrateInput<
 	poolLpAccount: Address<TAccountPoolLpAccount>;
 	creatorFeeConfig: Address<TAccountCreatorFeeConfig>;
 	quoteTokenProgram: Address<TAccountQuoteTokenProgram>;
+	dexCreatorFeeConfig: Address<TAccountDexCreatorFeeConfig>;
 };
 
 export function getMigrateInstruction<
@@ -567,6 +623,7 @@ export function getMigrateInstruction<
 	TAccountPoolLpAccount extends string,
 	TAccountCreatorFeeConfig extends string,
 	TAccountQuoteTokenProgram extends string,
+	TAccountDexCreatorFeeConfig extends string,
 >(
 	input: MigrateInput<
 		TAccountCaller,
@@ -581,7 +638,8 @@ export function getMigrateInstruction<
 		TAccountPoolQuoteVault,
 		TAccountPoolLpAccount,
 		TAccountCreatorFeeConfig,
-		TAccountQuoteTokenProgram
+		TAccountQuoteTokenProgram,
+		TAccountDexCreatorFeeConfig
 	>,
 ): MigrateInstruction<
 	typeof SEND_LAUNCHPAD_PROGRAM_ADDRESS,
@@ -606,7 +664,8 @@ export function getMigrateInstruction<
 	'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL',
 	'11111111111111111111111111111111',
 	'FJVebqCthxH6JM8vvkJb7yRYA7Emsib1C1vu4ZePSP3T',
-	'5R1uFyEE4oxqkm7hJDqHq6gXaLVF9dxeF3LF4yz1sfLP'
+	'5R1uFyEE4oxqkm7hJDqHq6gXaLVF9dxeF3LF4yz1sfLP',
+	TAccountDexCreatorFeeConfig
 > {
 	// Program address.
 	const programAddress = SEND_LAUNCHPAD_PROGRAM_ADDRESS;
@@ -633,7 +692,7 @@ export function getMigrateInstruction<
 		nexusProgram: { value: null, isWritable: false },
 		creatorFeeConfig: {
 			value: input.creatorFeeConfig ?? null,
-			isWritable: false,
+			isWritable: true,
 		},
 		baseTokenProgram: { value: null, isWritable: false },
 		quoteTokenProgram: {
@@ -644,6 +703,10 @@ export function getMigrateInstruction<
 		systemProgram: { value: null, isWritable: false },
 		eventAuthority: { value: null, isWritable: false },
 		program: { value: null, isWritable: false },
+		dexCreatorFeeConfig: {
+			value: input.dexCreatorFeeConfig ?? null,
+			isWritable: true,
+		},
 	};
 	const accounts = originalAccounts as Record<
 		keyof typeof originalAccounts,
@@ -714,6 +777,7 @@ export function getMigrateInstruction<
 			getAccountMeta('systemProgram', accounts.systemProgram),
 			getAccountMeta('eventAuthority', accounts.eventAuthority),
 			getAccountMeta('program', accounts.program),
+			getAccountMeta('dexCreatorFeeConfig', accounts.dexCreatorFeeConfig),
 		],
 		data: getMigrateInstructionDataEncoder().encode({}),
 		programAddress,
@@ -740,7 +804,8 @@ export function getMigrateInstruction<
 		'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL',
 		'11111111111111111111111111111111',
 		'FJVebqCthxH6JM8vvkJb7yRYA7Emsib1C1vu4ZePSP3T',
-		'5R1uFyEE4oxqkm7hJDqHq6gXaLVF9dxeF3LF4yz1sfLP'
+		'5R1uFyEE4oxqkm7hJDqHq6gXaLVF9dxeF3LF4yz1sfLP',
+		TAccountDexCreatorFeeConfig
 	>);
 }
 
@@ -772,6 +837,7 @@ export type ParsedMigrateInstruction<
 		systemProgram: TAccountMetas[19];
 		eventAuthority: TAccountMetas[20];
 		program: TAccountMetas[21];
+		dexCreatorFeeConfig: TAccountMetas[22];
 	};
 	data: MigrateInstructionData;
 };
@@ -792,12 +858,12 @@ export function parseMigrateInstruction<
 		error.name = 'InstructionDiscriminatorMismatchError';
 		throw error;
 	}
-	if (instruction.accounts.length < 22) {
+	if (instruction.accounts.length < 23) {
 		throw new SolanaError(
 			SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
 			{
 				actualAccountMetas: instruction.accounts.length,
-				expectedAccountMetas: 22,
+				expectedAccountMetas: 23,
 			},
 		);
 	}
@@ -834,6 +900,7 @@ export function parseMigrateInstruction<
 			systemProgram: getNextAccount(),
 			eventAuthority: getNextAccount(),
 			program: getNextAccount(),
+			dexCreatorFeeConfig: getNextAccount(),
 		},
 		data: getMigrateInstructionDataDecoder().decode(instruction.data),
 	};

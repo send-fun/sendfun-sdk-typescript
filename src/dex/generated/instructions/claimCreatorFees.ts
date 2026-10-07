@@ -42,7 +42,11 @@ import {
 	getAddressFromResolvedInstructionAccount,
 	type ResolvedInstructionAccount,
 } from '@solana/kit/program-client-core';
-import { EVENT_AUTHORITY_PDA_ADDRESS, findPoolPda } from '../pdas/index.js';
+import {
+	EVENT_AUTHORITY_PDA_ADDRESS,
+	findCreatorFeeConfigPda,
+	findPoolPda,
+} from '../pdas/index.js';
 import { SEND_DEX_PROGRAM_ADDRESS } from '../programs/index.js';
 
 export const CLAIM_CREATOR_FEES_DISCRIMINATOR: ReadonlyUint8Array =
@@ -93,7 +97,7 @@ export type ClaimCreatorFeesInstruction<
 				? WritableAccount<TAccountPool>
 				: TAccountPool,
 			TAccountCreatorFeeConfig extends string
-				? ReadonlyAccount<TAccountCreatorFeeConfig>
+				? WritableAccount<TAccountCreatorFeeConfig>
 				: TAccountCreatorFeeConfig,
 			TAccountNexusGlobalConfig extends string
 				? ReadonlyAccount<TAccountNexusGlobalConfig>
@@ -181,7 +185,7 @@ export type ClaimCreatorFeesAsyncInput<
 	claimer: TransactionSigner<TAccountClaimer>;
 	payer: TransactionSigner<TAccountPayer>;
 	pool?: Address<TAccountPool>;
-	creatorFeeConfig: Address<TAccountCreatorFeeConfig>;
+	creatorFeeConfig?: Address<TAccountCreatorFeeConfig>;
 	baseMint: Address<TAccountBaseMint>;
 	quoteMint: Address<TAccountQuoteMint>;
 	quoteVault?: Address<TAccountQuoteVault>;
@@ -244,7 +248,7 @@ export async function getClaimCreatorFeesInstructionAsync<
 		pool: { value: input.pool ?? null, isWritable: true },
 		creatorFeeConfig: {
 			value: input.creatorFeeConfig ?? null,
-			isWritable: false,
+			isWritable: true,
 		},
 		nexusGlobalConfig: { value: null, isWritable: false },
 		baseMint: { value: input.baseMint ?? null, isWritable: false },
@@ -272,6 +276,18 @@ export async function getClaimCreatorFeesInstructionAsync<
 	// Resolve default values.
 	if (!accounts.pool.value) {
 		accounts.pool.value = await findPoolPda({
+			baseMint: getAddressFromResolvedInstructionAccount(
+				'baseMint',
+				accounts.baseMint.value,
+			),
+			quoteMint: getAddressFromResolvedInstructionAccount(
+				'quoteMint',
+				accounts.quoteMint.value,
+			),
+		});
+	}
+	if (!accounts.creatorFeeConfig.value) {
+		accounts.creatorFeeConfig.value = await findCreatorFeeConfigPda({
 			baseMint: getAddressFromResolvedInstructionAccount(
 				'baseMint',
 				accounts.baseMint.value,
@@ -474,7 +490,7 @@ export function getClaimCreatorFeesInstruction<
 		pool: { value: input.pool ?? null, isWritable: true },
 		creatorFeeConfig: {
 			value: input.creatorFeeConfig ?? null,
-			isWritable: false,
+			isWritable: true,
 		},
 		nexusGlobalConfig: { value: null, isWritable: false },
 		baseMint: { value: input.baseMint ?? null, isWritable: false },
