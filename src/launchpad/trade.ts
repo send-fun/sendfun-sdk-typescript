@@ -1,31 +1,35 @@
-import type { Address, Instruction, TransactionSigner } from '@solana/kit';
-import type { BuyQuote, MintFee, SellQuote } from '../math/amm.js';
+import type {
+	AccountMeta,
+	Address,
+	Instruction,
+	InstructionWithAccounts,
+	InstructionWithData,
+	ReadonlyUint8Array,
+	TransactionSigner,
+} from '@solana/kit';
+import type { BuyQuote, SellQuote } from '../math/amm.js';
 import * as amm from '../math/amm.js';
+import { appendHookAccounts } from '../transfer-hook/fetch.js';
+import { tradeLegsOf } from '../transfer-hook/legs.js';
+import type { HookLegs } from '../transfer-hook/resolver.js';
+import {
+	checkBaseMint,
+	hookStateOf,
+	tradeFees,
+	type MintInfo,
+} from '../utils/mint-info.js';
 import type { PartnerInput } from '../utils/partner.js';
 import { getBuyExactInInstructionAsync } from './generated/instructions/buyExactIn.js';
 import { getBuyExactOutInstructionAsync } from './generated/instructions/buyExactOut.js';
 import { getSellExactInInstructionAsync } from './generated/instructions/sellExactIn.js';
 import { getSellExactOutInstructionAsync } from './generated/instructions/sellExactOut.js';
+import { parseSendLaunchpadInstruction } from './generated/instructions/sendLaunchpad.instructions.js';
 
-export interface LaunchpadTradeParams {
-	user: TransactionSigner;
-	payer?: TransactionSigner;
-	baseMint: Address;
-	quoteMint: Address;
+export interface LaunchpadTradeParams extends LaunchpadInstructionParams {
 	virtualBaseReserves: bigint;
 	virtualQuoteReserves: bigint;
 	feeBps: number;
 	slippageBps: number;
-	partner: PartnerInput;
-	platformConfig: Address;
-	quoteTokenProgram: Address;
-	/** The quote mint's transfer fee for the epoch the trade lands in. A missing or old fee gives wrong slippage bounds. */
-	quoteFee?: MintFee;
-	baseFee?: MintFee;
-	/** {@inheritDoc LaunchpadInstructionParams.userQuoteAccount} */
-	userQuoteAccount?: Address;
-	/** {@inheritDoc LaunchpadInstructionParams.userBaseAccount} */
-	userBaseAccount?: Address;
 }
 
 export interface LaunchpadBuyParams extends LaunchpadTradeParams {
@@ -35,11 +39,12 @@ export interface LaunchpadBuyParams extends LaunchpadTradeParams {
 export interface LaunchpadInstructionParams {
 	user: TransactionSigner;
 	payer?: TransactionSigner;
-	baseMint: Address;
-	quoteMint: Address;
+	/** From `utils.fetchMintInfo`. */
+	baseMintInfo: MintInfo;
+	/** From `utils.fetchMintInfo`. */
+	quoteMintInfo: MintInfo;
 	partner: PartnerInput;
 	platformConfig: Address;
-	quoteTokenProgram: Address;
 	/** Any quote-mint token account that `user` owns. Defaults to the user's ATA.
 	 *  The program creates a missing ATA, and `payer` pays the rent. */
 	userQuoteAccount?: Address;
@@ -58,8 +63,7 @@ export async function buyExactOut(
 		reserveBase: params.virtualBaseReserves,
 		baseAmountOut: params.baseAmountOut,
 		feeBps: params.feeBps,
-		quoteFee: params.quoteFee,
-		baseFee: params.baseFee,
+		...tradeFees(params),
 		baseReserveCap: params.realBaseReserves,
 	});
 	// The program checks `maxAmountIn` against the gross the buyer sends, quote transfer fee included.
@@ -86,8 +90,7 @@ export async function buyExactIn(
 		reserveBase: params.virtualBaseReserves,
 		quoteAmountIn: params.quoteAmountIn,
 		feeBps: params.feeBps,
-		quoteFee: params.quoteFee,
-		baseFee: params.baseFee,
+		...tradeFees(params),
 		baseReserveCap: params.realBaseReserves,
 	});
 	// The program checks `minAmountOut` against what the buyer receives, not the vault's debit.
@@ -113,8 +116,7 @@ export async function sellExactIn(
 		reserveBase: params.virtualBaseReserves,
 		baseAmountIn: params.baseAmountIn,
 		feeBps: params.feeBps,
-		quoteFee: params.quoteFee,
-		baseFee: params.baseFee,
+		...tradeFees(params),
 	});
 	// The program checks `minAmountOut` against what the seller receives, not the vault's debit.
 	const minQuoteOut = amm.calculateSlippageDown(
@@ -140,8 +142,7 @@ export async function sellExactOut(
 		reserveBase: params.virtualBaseReserves,
 		quoteAmountOut: params.quoteAmountOut,
 		feeBps: params.feeBps,
-		quoteFee: params.quoteFee,
-		baseFee: params.baseFee,
+		...tradeFees(params),
 	});
 	// The program checks `maxAmountIn` against the gross the seller sends, base transfer fee included.
 	const maxBaseIn = amm.calculateSlippageUp(
@@ -164,12 +165,15 @@ export async function buildBuyExactInInstruction(
 		minAmountOut: bigint;
 	},
 ): Promise<Instruction> {
-	const shared = resolveSharedAccounts(params);
-	return getBuyExactInInstructionAsync({
-		...shared,
-		amountIn: params.amountIn,
-		minAmountOut: params.minAmountOut,
-	});
+	const shared = sharedAccounts(params);
+	return withHooks(
+		await getBuyExactInInstructionAsync({
+			...shared,
+			amountIn: params.amountIn,
+			minAmountOut: params.minAmountOut,
+		}),
+		params,
+	);
 }
 
 export async function buildBuyExactOutInstruction(
@@ -178,12 +182,15 @@ export async function buildBuyExactOutInstruction(
 		maxAmountIn: bigint;
 	},
 ): Promise<Instruction> {
-	const shared = resolveSharedAccounts(params);
-	return getBuyExactOutInstructionAsync({
-		...shared,
-		amountOut: params.amountOut,
-		maxAmountIn: params.maxAmountIn,
-	});
+	const shared = sharedAccounts(params);
+	return withHooks(
+		await getBuyExactOutInstructionAsync({
+			...shared,
+			amountOut: params.amountOut,
+			maxAmountIn: params.maxAmountIn,
+		}),
+		params,
+	);
 }
 
 export async function buildSellExactInInstruction(
@@ -192,12 +199,15 @@ export async function buildSellExactInInstruction(
 		minAmountOut: bigint;
 	},
 ): Promise<Instruction> {
-	const shared = resolveSharedAccounts(params);
-	return getSellExactInInstructionAsync({
-		...shared,
-		amountIn: params.amountIn,
-		minAmountOut: params.minAmountOut,
-	});
+	const shared = sharedAccounts(params);
+	return withHooks(
+		await getSellExactInInstructionAsync({
+			...shared,
+			amountIn: params.amountIn,
+			minAmountOut: params.minAmountOut,
+		}),
+		params,
+	);
 }
 
 export async function buildSellExactOutInstruction(
@@ -206,12 +216,15 @@ export async function buildSellExactOutInstruction(
 		maxAmountIn: bigint;
 	},
 ): Promise<Instruction> {
-	const shared = resolveSharedAccounts(params);
-	return getSellExactOutInstructionAsync({
-		...shared,
-		amountOut: params.amountOut,
-		maxAmountIn: params.maxAmountIn,
-	});
+	const shared = sharedAccounts(params);
+	return withHooks(
+		await getSellExactOutInstructionAsync({
+			...shared,
+			amountOut: params.amountOut,
+			maxAmountIn: params.maxAmountIn,
+		}),
+		params,
+	);
 }
 
 /** Returns the percent of the curve's real base sold, from 0 to 100. At 100 the curve can migrate. */
@@ -228,15 +241,64 @@ export function calculateBondingCurveProgress(params: {
 	);
 }
 
-function resolveSharedAccounts(params: LaunchpadInstructionParams) {
+type BuiltTrade = Instruction &
+	InstructionWithAccounts<readonly AccountMeta[]> &
+	InstructionWithData<ReadonlyUint8Array>;
+
+async function withHooks(
+	instruction: BuiltTrade,
+	params: LaunchpadInstructionParams,
+): Promise<Instruction> {
+	return appendHookAccounts(
+		instruction,
+		tradeLegs(instruction),
+		hookStateOf([params.baseMintInfo, params.quoteMintInfo]),
+	);
+}
+
+// The two legs of a trade this module built, read by name with the generated
+// parser. The curve is written before the transfers.
+function tradeLegs(instruction: BuiltTrade): HookLegs {
+	const parsed = parseSendLaunchpadInstruction(instruction);
+	switch (parsed?.instructionType) {
+		case 'buyExactIn':
+		case 'buyExactOut':
+		case 'sellExactIn':
+		case 'sellExactOut': {
+			const { accounts } = parsed;
+			return tradeLegsOf(
+				parsed.instructionType.startsWith('buy') ? 'buy' : 'sell',
+				{
+					user: accounts.user.address,
+					market: accounts.bondingCurve.address,
+					baseMint: accounts.baseMint.address,
+					quoteMint: accounts.quoteMint.address,
+					baseVault: accounts.baseVault.address,
+					quoteVault: accounts.quoteVault.address,
+					userBaseAccount: accounts.userBaseAccount.address,
+					userQuoteAccount: accounts.userQuoteAccount.address,
+				},
+				{ writesMarket: true },
+			);
+		}
+		default:
+			throw new RangeError(
+				`expected a launchpad trade, got ${parsed?.instructionType ?? 'none'}`,
+			);
+	}
+}
+
+function sharedAccounts(params: LaunchpadInstructionParams) {
+	const { baseMintInfo, quoteMintInfo } = params;
+	checkBaseMint('launchpad.trade', baseMintInfo);
 	return {
 		user: params.user,
 		payer: params.payer ?? params.user,
-		baseMint: params.baseMint,
-		quoteMint: params.quoteMint,
+		baseMint: baseMintInfo.address,
+		quoteMint: quoteMintInfo.address,
 		partner: params.partner,
 		platformConfig: params.platformConfig,
-		quoteTokenProgram: params.quoteTokenProgram,
+		quoteTokenProgram: quoteMintInfo.tokenProgram,
 		// When omitted, the generated client derives the ATA.
 		...(params.userQuoteAccount !== undefined && {
 			userQuoteAccount: params.userQuoteAccount,

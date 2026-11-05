@@ -3,6 +3,8 @@ import type { Address } from '@solana/kit';
 import { SEND_DEX_PROGRAM_ADDRESS } from './dex/generated/programs/index.js';
 import { SEND_LAUNCHPAD_PROGRAM_ADDRESS } from './launchpad/generated/programs/index.js';
 import { SEND_NEXUS_PROGRAM_ADDRESS } from './nexus/generated/programs/index.js';
+import type { MintInfo } from './utils/mint-info.js';
+import { plainMintInfo } from './utils/plain-mint-info.js';
 
 export const TOKEN_DECIMALS = 6;
 
@@ -28,6 +30,20 @@ export const WSOL_MINT: Address = address(
 
 export const USDC_MINT: Address = address(
 	'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+);
+
+/** The mint info of WSOL. */
+export const WSOL_MINT_INFO: MintInfo = plainMintInfo(
+	WSOL_MINT,
+	TOKEN_PROGRAM_ADDRESS,
+	9,
+);
+
+/** The mint info of USDC. */
+export const USDC_MINT_INFO: MintInfo = plainMintInfo(
+	USDC_MINT,
+	TOKEN_PROGRAM_ADDRESS,
+	6,
 );
 
 export const DEFAULT_PARTNER: Address<'11111111111111111111111111111111'> =

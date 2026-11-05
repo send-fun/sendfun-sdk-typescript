@@ -3,11 +3,35 @@ import { copyFile, mkdir, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, join, relative, sep } from 'node:path';
 import { outputTail, runCommand } from './process.js';
-import { TYPES_NODE_VERSION } from './versions.js';
+import { TYPES_NODE_VERSION, YARN_VERSION } from './versions.js';
 
-export type PackageManager = 'npm' | 'pnpm';
+export type PackageManager = 'npm' | 'pnpm' | 'yarn';
 
-export const PACKAGE_MANAGERS: readonly PackageManager[] = ['npm', 'pnpm'];
+/** `yarn` is Yarn Berry with Plug'n'Play. */
+export const PACKAGE_MANAGERS: readonly PackageManager[] = [
+	'npm',
+	'pnpm',
+	'yarn',
+];
+
+/** Where `installYarn` puts the Yarn CLI, under the temp root beside the projects. */
+const YARN_DIRECTORY = 'yarn';
+const YARN_CLI = join('node_modules', '@yarnpkg', 'cli-dist', 'bin', 'yarn.js');
+
+/**
+ * Plug'n'Play gives each package only what it declares. An SDK import that its
+ * manifest does not cover, such as a bare `@solana/program-client-core`, fails
+ * to load. Each project keeps its own cache, with no global mirror.
+ * `enableScripts: false` matches the other managers' `--ignore-scripts`.
+ */
+const YARNRC = [
+	'nodeLinker: pnp',
+	'enableGlobalCache: false',
+	'enableMirror: false',
+	'enableScripts: false',
+	'enableTelemetry: false',
+	'',
+].join('\n');
 
 export interface Project {
 	readonly directory: string;
@@ -53,11 +77,17 @@ export async function createProject(options: {
 			'@solana/kit': options.kit,
 		},
 		devDependencies: { '@types/node': TYPES_NODE_VERSION },
+		...(options.packageManager === 'yarn'
+			? { packageManager: `yarn@${YARN_VERSION}` }
+			: {}),
 	};
 	await writeFile(
 		join(directory, 'package.json'),
 		`${JSON.stringify(manifest, null, '\t')}\n`,
 	);
+	if (options.packageManager === 'yarn') {
+		await writeFile(join(directory, '.yarnrc.yml'), YARNRC);
+	}
 	await Promise.all([
 		...FIXTURE_FILES.map((file) =>
 			copyFile(
@@ -77,13 +107,64 @@ export async function createProject(options: {
 	};
 }
 
+/**
+ * Installs the pinned Yarn CLI once, with npm, so no project depends on a
+ * global yarn or on corepack. Returns problems.
+ */
+export async function installYarn(root: string): Promise<string[]> {
+	const directory = join(root, YARN_DIRECTORY);
+	await mkdir(directory, { recursive: true });
+	const manifest = {
+		name: 'compat-yarn',
+		private: true,
+		dependencies: { '@yarnpkg/cli-dist': YARN_VERSION },
+	};
+	await writeFile(
+		join(directory, 'package.json'),
+		`${JSON.stringify(manifest, null, '\t')}\n`,
+	);
+	const result = await runCommand(
+		'npm',
+		['install', '--no-audit', '--no-fund', '--ignore-scripts'],
+		{ cwd: directory, timeoutMs: 600_000 },
+	);
+	return result.code === 0
+		? []
+		: [`Yarn ${YARN_VERSION} install failed:\n${outputTail(result)}`];
+}
+
+/** `yarn <args>` for a project, run by the CLI `installYarn` put beside it. */
+export function yarnCommand(
+	project: Project,
+	args: readonly string[],
+): { readonly command: string; readonly args: readonly string[] } {
+	return {
+		command: process.execPath,
+		args: [
+			join(dirname(project.directory), YARN_DIRECTORY, YARN_CLI),
+			...args,
+		],
+	};
+}
+
+/** Install arguments of the managers that lay out node_modules. */
+const INSTALL_ARGS: Readonly<Record<'npm' | 'pnpm', readonly string[]>> = {
+	npm: ['install', '--no-audit', '--no-fund', '--ignore-scripts'],
+	pnpm: ['install', '--no-frozen-lockfile', '--ignore-scripts'],
+};
+
 /** Installs a project from its manifest, as a consumer would. Returns problems. */
 export async function installProject(project: Project): Promise<string[]> {
-	const args =
-		project.packageManager === 'npm'
-			? ['install', '--no-audit', '--no-fund', '--ignore-scripts']
-			: ['install', '--no-frozen-lockfile', '--ignore-scripts'];
-	const result = await runCommand(project.packageManager, args, {
+	// No lockfile exists yet. When `CI` is set, Yarn fails an install that
+	// writes one. `--no-immutable` turns that check off.
+	const { command, args } =
+		project.packageManager === 'yarn'
+			? yarnCommand(project, ['install', '--no-immutable'])
+			: {
+					command: project.packageManager,
+					args: INSTALL_ARGS[project.packageManager],
+				};
+	const result = await runCommand(command, args, {
 		cwd: project.directory,
 		timeoutMs: 600_000,
 	});

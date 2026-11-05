@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { address, getBase64Encoder } from '@solana/kit';
+import { address, getBase64Encoder, type Address } from '@solana/kit';
 import {
 	getMintDecoder,
 	type Extension,
@@ -13,12 +13,15 @@ import {
 } from '../src/constants.js';
 import type { MintFee } from '../src/math/amm.js';
 import {
-	decodeTransferFeeConfig,
-	mintFeeAtEpoch,
-	transferFeeAtEpoch,
+	decodeFeeSchedule,
+	feeAt,
+	type FeeSchedule,
+} from '../src/transfer-fee.js';
+import {
+	feeScheduleOf,
 	type TransferFeeConfig,
 	type TransferFeeEntry,
-} from '../src/transfer-fee.js';
+} from '../src/utils/mint-extensions.js';
 
 const U64_MAX = 18_446_744_073_709_551_615n;
 
@@ -74,6 +77,12 @@ function transferFeeConfigEntry(length: number): number[] {
 	return [1, 0, length & 0xff, length >> 8, ...zeros(length)];
 }
 
+const READ_EPOCH = 3n;
+
+function decode(data: Uint8Array, owner: Address): FeeSchedule | null {
+	return decodeFeeSchedule(data, owner, READ_EPOCH);
+}
+
 // The entries differ in rate and in cap, so a wrong pick fails on both fields.
 const TWO_ENTRY_SCHEDULE: TransferFeeConfig = {
 	authority: undefined,
@@ -81,48 +90,55 @@ const TWO_ENTRY_SCHEDULE: TransferFeeConfig = {
 	newer: { epoch: 7n, maximumFee: 2_000n, basisPoints: 250 },
 };
 
-describe('decodeTransferFeeConfig', () => {
+describe('decodeFeeSchedule', () => {
 	it('reads both entries off the live tKalshi mint', () => {
 		assert.deepEqual(
-			decodeTransferFeeConfig(
-				accountBytes(TKALSHI_ACCOUNT),
-				TOKEN_2022_PROGRAM_ADDRESS,
-			),
+			decode(accountBytes(TKALSHI_ACCOUNT), TOKEN_2022_PROGRAM_ADDRESS),
 			{
 				authority: address(
 					'EXvTtxurWBUNNCtLojaN8ZBJFNJPZFSH3szoih9hh7YW',
 				),
-				older: { epoch: 922n, maximumFee: U64_MAX, basisPoints: 20 },
-				newer: { epoch: 922n, maximumFee: U64_MAX, basisPoints: 20 },
-			} satisfies TransferFeeConfig,
+				older: { bps: 20, maximumFee: U64_MAX },
+				newer: { bps: 20, maximumFee: U64_MAX },
+				newerEpoch: 922n,
+				readEpoch: READ_EPOCH,
+			} satisfies FeeSchedule,
 		);
 	});
 
 	it('clears a Token-2022 mint that carries other extensions', () => {
 		assert.equal(
-			decodeTransferFeeConfig(
-				accountBytes(AAPLX_ACCOUNT),
-				TOKEN_2022_PROGRAM_ADDRESS,
-			),
-			undefined,
+			decode(accountBytes(AAPLX_ACCOUNT), TOKEN_2022_PROGRAM_ADDRESS),
+			null,
 		);
 	});
 
 	it('clears a classic SPL mint, which has no TLV region at all', () => {
-		assert.equal(
-			decodeTransferFeeConfig(classicMintBytes(), TOKEN_PROGRAM_ADDRESS),
-			undefined,
+		assert.equal(decode(classicMintBytes(), TOKEN_PROGRAM_ADDRESS), null);
+	});
+
+	it('refuses an SPL Token account that is not an initialized mint', () => {
+		assert.throws(() => decode(new Uint8Array(82), TOKEN_PROGRAM_ADDRESS), {
+			message: 'decodeFeeSchedule: the mint is not initialized',
+		});
+		// A token account: 165 bytes, the length SPL Token gives every one.
+		assert.throws(
+			() => decode(new Uint8Array(165).fill(1), TOKEN_PROGRAM_ADDRESS),
+			{
+				message:
+					'decodeFeeSchedule: an SPL Token mint holds 165 bytes, expected 82',
+			},
 		);
 	});
 
 	it('stops at the terminator that trailing rent slack reads as', () => {
 		// A `MetadataPointer` entry, then 512 bytes of zeros.
 		assert.equal(
-			decodeTransferFeeConfig(
+			decode(
 				token2022MintBytes([18, 0, 64, 0, ...zeros(64 + 512)]),
 				TOKEN_2022_PROGRAM_ADDRESS,
 			),
-			undefined,
+			null,
 		);
 	});
 
@@ -130,11 +146,11 @@ describe('decodeTransferFeeConfig', () => {
 		// Token-2022 allocates extensions that total `Multisig::LEN` two bytes longer.
 		for (const tail of [1, 2, 3]) {
 			assert.equal(
-				decodeTransferFeeConfig(
+				decode(
 					token2022MintBytes([18, 0, 64, 0, ...zeros(64 + tail)]),
 					TOKEN_2022_PROGRAM_ADDRESS,
 				),
-				undefined,
+				null,
 				`tail of ${tail}`,
 			);
 		}
@@ -142,15 +158,11 @@ describe('decodeTransferFeeConfig', () => {
 
 	it('rejects an owner that is neither token program', () => {
 		assert.throws(
-			() =>
-				decodeTransferFeeConfig(
-					classicMintBytes(),
-					SYSTEM_PROGRAM_ADDRESS,
-				),
+			() => decode(classicMintBytes(), SYSTEM_PROGRAM_ADDRESS),
 			{
 				name: 'RangeError',
 				message:
-					'decodeTransferFeeConfig: 11111111111111111111111111111111 is not a token program',
+					'decodeFeeSchedule: 11111111111111111111111111111111 is not a token program',
 			},
 		);
 	});
@@ -158,14 +170,11 @@ describe('decodeTransferFeeConfig', () => {
 	it('rejects a TLV header cut in half', () => {
 		assert.throws(
 			() =>
-				decodeTransferFeeConfig(
-					token2022MintBytes([1, 0]),
-					TOKEN_2022_PROGRAM_ADDRESS,
-				),
+				decode(token2022MintBytes([1, 0]), TOKEN_2022_PROGRAM_ADDRESS),
 			{
 				name: 'RangeError',
 				message:
-					'decodeTransferFeeConfig: a TLV entry header runs past the end of the account',
+					'decodeFeeSchedule: a TLV entry runs past the end of the account',
 			},
 		);
 	});
@@ -173,14 +182,14 @@ describe('decodeTransferFeeConfig', () => {
 	it('rejects an entry whose length runs past the account', () => {
 		assert.throws(
 			() =>
-				decodeTransferFeeConfig(
+				decode(
 					token2022MintBytes([18, 0, 0x0f, 0x27]),
 					TOKEN_2022_PROGRAM_ADDRESS,
 				),
 			{
 				name: 'RangeError',
 				message:
-					'decodeTransferFeeConfig: a TLV entry runs past the end of the account',
+					'decodeFeeSchedule: a TLV entry runs past the end of the account',
 			},
 		);
 	});
@@ -188,14 +197,14 @@ describe('decodeTransferFeeConfig', () => {
 	it('rejects a TransferFeeConfig payload short of 108 bytes', () => {
 		assert.throws(
 			() =>
-				decodeTransferFeeConfig(
+				decode(
 					token2022MintBytes(transferFeeConfigEntry(100)),
 					TOKEN_2022_PROGRAM_ADDRESS,
 				),
 			{
 				name: 'RangeError',
 				message:
-					'decodeTransferFeeConfig: TransferFeeConfig holds 100 bytes, expected 108',
+					'decodeFeeSchedule: extension 1 holds 100 bytes, expected 108',
 			},
 		);
 	});
@@ -203,47 +212,64 @@ describe('decodeTransferFeeConfig', () => {
 	it('rejects a TransferFeeConfig payload longer than 108 bytes', () => {
 		assert.throws(
 			() =>
-				decodeTransferFeeConfig(
+				decode(
 					token2022MintBytes(transferFeeConfigEntry(116)),
 					TOKEN_2022_PROGRAM_ADDRESS,
 				),
 			{
 				name: 'RangeError',
 				message:
-					'decodeTransferFeeConfig: TransferFeeConfig holds 116 bytes, expected 108',
+					'decodeFeeSchedule: extension 1 holds 116 bytes, expected 108',
 			},
 		);
 	});
 
 	it('clears a bare Token-2022 mint that stops at the 82-byte base', () => {
 		assert.equal(
-			decodeTransferFeeConfig(
-				truncatedToken2022Bytes(82),
-				TOKEN_2022_PROGRAM_ADDRESS,
-			),
-			undefined,
+			decode(truncatedToken2022Bytes(82), TOKEN_2022_PROGRAM_ADDRESS),
+			null,
 		);
 	});
 
 	it('rejects a Token-2022 mint that stops between the base and the first entry', () => {
 		assert.throws(
 			() =>
-				decodeTransferFeeConfig(
+				decode(
 					truncatedToken2022Bytes(120),
 					TOKEN_2022_PROGRAM_ADDRESS,
 				),
 			{
 				name: 'RangeError',
 				message:
-					'decodeTransferFeeConfig: a Token-2022 mint holds 120 bytes, expected 82 or at least 166',
+					'decodeFeeSchedule: a Token-2022 mint holds 120 bytes, expected 82 or at least 166',
 			},
 		);
+	});
+
+	it('rejects a mint Token-2022 never writes, as decodeMintState does', () => {
+		const uninitialized = token2022MintBytes(transferFeeConfigEntry(108));
+		uninitialized[IS_INITIALIZED] = 0;
+		const padded = token2022MintBytes(transferFeeConfigEntry(108));
+		padded[100] = 1;
+		for (const [data, message] of [
+			[uninitialized, 'the mint is not initialized'],
+			[padded, 'the padding after the base mint is not zero'],
+			[
+				truncatedToken2022Bytes(355),
+				'a Token-2022 mint cannot hold 355 bytes',
+			],
+		] as const) {
+			assert.throws(() => decode(data, TOKEN_2022_PROGRAM_ADDRESS), {
+				name: 'RangeError',
+				message: `decodeFeeSchedule: ${message}`,
+			});
+		}
 	});
 
 	it('rejects a token ACCOUNT, which walks the same region with other types', () => {
 		assert.throws(
 			() =>
-				decodeTransferFeeConfig(
+				decode(
 					token2022MintBytes(
 						transferFeeConfigEntry(108),
 						ACCOUNT_TYPE_ACCOUNT,
@@ -252,28 +278,30 @@ describe('decodeTransferFeeConfig', () => {
 				),
 			{
 				name: 'RangeError',
-				message:
-					'decodeTransferFeeConfig: account type 2 is not a mint',
+				message: 'decodeFeeSchedule: account type 2 is not a mint',
 			},
 		);
 	});
 
 	it('reads an all-zero authority as unset', () => {
 		assert.deepEqual(
-			decodeTransferFeeConfig(
+			decode(
 				token2022MintBytes(transferFeeConfigEntry(108)),
 				TOKEN_2022_PROGRAM_ADDRESS,
 			),
 			{
-				authority: undefined,
-				older: { epoch: 0n, maximumFee: 0n, basisPoints: 0 },
-				newer: { epoch: 0n, maximumFee: 0n, basisPoints: 0 },
-			} satisfies TransferFeeConfig,
+				authority: null,
+				older: { bps: 0, maximumFee: 0n },
+				newer: { bps: 0, maximumFee: 0n },
+				newerEpoch: 0n,
+				readEpoch: READ_EPOCH,
+			} satisfies FeeSchedule,
 		);
 	});
 });
 
-// `@solana-program/token-2022` is a test oracle only. The SDK does not depend on it.
+// `@solana-program/token-2022` is the oracle here. The SDK parses the fee config
+// by hand, by SPL's TLV rules, and skips unknown extension types.
 const UNSET_AUTHORITY = address('11111111111111111111111111111111');
 
 const METADATA_POINTER = [18, 0, 64, 0, ...zeros(64)];
@@ -330,13 +358,13 @@ function assertAgreesWithKit(
 	const kit = kitConfig(data);
 	assert.equal(kit !== undefined, hasFee, `${label}: kit presence`);
 	assert.deepEqual(
-		decodeTransferFeeConfig(data, TOKEN_2022_PROGRAM_ADDRESS),
-		kit,
+		decode(data, TOKEN_2022_PROGRAM_ADDRESS),
+		kit === undefined ? null : feeScheduleOf(kit, READ_EPOCH),
 		label,
 	);
 }
 
-describe('decodeTransferFeeConfig agrees with @solana-program/token-2022', () => {
+describe('decodeFeeSchedule agrees with @solana-program/token-2022', () => {
 	it('on the live tKalshi and AAPLx mints', () => {
 		assertAgreesWithKit(accountBytes(TKALSHI_ACCOUNT), true, 'tKalshi');
 		assertAgreesWithKit(accountBytes(AAPLX_ACCOUNT), false, 'AAPLx');
@@ -367,42 +395,27 @@ describe('decodeTransferFeeConfig agrees with @solana-program/token-2022', () =>
 	});
 });
 
-describe('transferFeeAtEpoch', () => {
-	it('holds the older entry until the newer one is live', () => {
-		assert.deepEqual(transferFeeAtEpoch(TWO_ENTRY_SCHEDULE, 6n), {
-			bps: 100,
-			maximumFee: 1_000n,
-		} satisfies MintFee);
-	});
+describe('feeAt', () => {
+	const schedule = feeScheduleOf(TWO_ENTRY_SCHEDULE, READ_EPOCH);
+	for (const [epoch, fee] of [
+		[6n, { bps: 100, maximumFee: 1_000n }],
+		[7n, { bps: 250, maximumFee: 2_000n }],
+		[8n, { bps: 250, maximumFee: 2_000n }],
+	] as const) {
+		it(`at epoch ${epoch}`, () => {
+			assert.deepEqual(feeAt(schedule, epoch), fee satisfies MintFee);
+		});
+	}
 
-	it('takes the newer entry on the epoch it names', () => {
-		assert.deepEqual(transferFeeAtEpoch(TWO_ENTRY_SCHEDULE, 7n), {
-			bps: 250,
-			maximumFee: 2_000n,
-		} satisfies MintFee);
-	});
-});
-
-describe('mintFeeAtEpoch', () => {
 	it('prices the live tKalshi schedule', () => {
-		assert.deepEqual(
-			mintFeeAtEpoch(
-				accountBytes(TKALSHI_ACCOUNT),
-				TOKEN_2022_PROGRAM_ADDRESS,
-				922n,
-			),
-			{ bps: 20, maximumFee: U64_MAX } satisfies MintFee,
+		const tKalshi = decode(
+			accountBytes(TKALSHI_ACCOUNT),
+			TOKEN_2022_PROGRAM_ADDRESS,
 		);
-	});
-
-	it('passes a mint without the extension through as undefined', () => {
-		assert.equal(
-			mintFeeAtEpoch(
-				accountBytes(AAPLX_ACCOUNT),
-				TOKEN_2022_PROGRAM_ADDRESS,
-				922n,
-			),
-			undefined,
-		);
+		assert.ok(tKalshi, 'tKalshi carries a TransferFeeConfig');
+		assert.deepEqual(feeAt(tKalshi, 922n), {
+			bps: 20,
+			maximumFee: U64_MAX,
+		} satisfies MintFee);
 	});
 });

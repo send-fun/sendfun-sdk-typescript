@@ -43,8 +43,8 @@ function assertMintFee(fee: MintFee): void {
 
 /** Returns the transfer fee on `amount`. Rounds up, then caps at `maximumFee`, in SPL's order.
  *  Returns 0 without `fee`. Throws `RangeError` if `fee` is out of range. */
-export function feeOn(amount: bigint, fee?: MintFee): bigint {
-	if (fee === undefined) return 0n;
+export function feeOn(amount: bigint, fee?: MintFee | null): bigint {
+	if (fee === undefined || fee === null) return 0n;
 	assertMintFee(fee);
 	if (amount === 0n || fee.bps === 0) return 0n;
 
@@ -53,7 +53,7 @@ export function feeOn(amount: bigint, fee?: MintFee): bigint {
 }
 
 /** Returns what the recipient receives when `amount` is sent. `grossUp` is the inverse. */
-export function amountAfterFee(amount: bigint, fee?: MintFee): bigint {
+export function amountAfterFee(amount: bigint, fee?: MintFee | null): bigint {
 	return amount - feeOn(amount, fee);
 }
 
@@ -79,8 +79,8 @@ function preFeeAmount(amount: bigint, fee: MintFee): bigint | undefined {
 
 /** Returns the amount to send so that exactly `amount` arrives. Returns `amount` without `fee`.
  *  Throws {@link TransferFeeNotSettleableError} if no such amount exists. */
-export function grossUp(amount: bigint, fee?: MintFee): bigint {
-	if (fee === undefined) return amount;
+export function grossUp(amount: bigint, fee?: MintFee | null): bigint {
+	if (fee === undefined || fee === null) return amount;
 	assertMintFee(fee);
 	if (amount === 0n) return 0n;
 
@@ -206,8 +206,8 @@ interface BaseQuoteParams {
 	reserveQuote: bigint;
 	reserveBase: bigint;
 	feeBps: number;
-	quoteFee?: MintFee;
-	baseFee?: MintFee;
+	quoteFee?: MintFee | null;
+	baseFee?: MintFee | null;
 }
 
 /** `baseReserveCap` is `bondingCurve.realBaseReserves`. A DEX pool has no cap. */
@@ -326,7 +326,7 @@ function ammSellExactOut(
 function buyQuote(
 	legs: AmmLegs,
 	quoteTransferFee: bigint,
-	baseFee?: MintFee,
+	baseFee?: MintFee | null,
 ): BuyQuote {
 	const baseTransferFee = feeOn(legs.baseAmount, baseFee);
 	return {
@@ -353,8 +353,11 @@ export function buyExactOut(
 
 	const baseOutOfVault = grossUp(params.baseAmountOut, params.baseFee);
 	const cap = params.baseReserveCap;
+	// The program grosses the buyer's net up again. That gross can be below the cap.
 	const baseAmount =
-		cap !== undefined && baseOutOfVault > cap ? cap : baseOutOfVault;
+		cap !== undefined && baseOutOfVault > cap
+			? grossUp(amountAfterFee(cap, params.baseFee), params.baseFee)
+			: baseOutOfVault;
 
 	const legs = ammBuyExactOut(params, baseAmount);
 	// The priced total must reach the vault, so the user sends it grossed up.

@@ -1,5 +1,7 @@
 import type { Address, Instruction, TransactionSigner } from '@solana/kit';
-import type { MintFee, TradeQuote } from '../math/amm.js';
+import type { TradeQuote } from '../math/amm.js';
+import { launchMintInfo } from '../utils/launch-mint-info.js';
+import type { MintInfo } from '../utils/mint-info.js';
 import type { PartnerInput } from '../utils/partner.js';
 import { getCreateTokenInstructionAsync } from './generated/instructions/createToken.js';
 import { buyExactIn } from './trade.js';
@@ -9,14 +11,15 @@ export interface CreateTokenParams {
 	payer?: TransactionSigner;
 	/** The wallet that claims the creator fees. */
 	coinCreator: Address;
+	/** The new mint. It signs the creation. */
 	baseMint: TransactionSigner;
-	quoteMint: Address;
+	/** From `utils.fetchMintInfo`. */
+	quoteMintInfo: MintInfo;
 	name: string;
 	symbol: string;
 	uri: string;
 	partner: PartnerInput;
 	platformConfig: Address;
-	quoteTokenProgram: Address;
 	creatorFeeMode: number;
 	creatorFeeBps: number;
 	/** The creator fee of the pool after migration, in bps. */
@@ -31,10 +34,6 @@ export interface CreateAndBuyParams extends CreateTokenParams {
 	initialVirtualBaseReserves: bigint;
 	/** `globalConfig.initialRealBaseReserves`. Caps the buy. */
 	initialRealBaseReserves: bigint;
-	/** The quote mint's transfer fee for the epoch the launch lands in. Without it, `minAmountOut`
-	 *  ignores the mint's cut, and a cut above `slippageBps` can make the buy fail. The new base
-	 *  mint has no transfer fee. */
-	quoteFee?: MintFee;
 }
 
 export async function buildCreateTokenInstruction(
@@ -45,10 +44,10 @@ export async function buildCreateTokenInstruction(
 		payer: params.payer ?? params.user,
 		coinCreator: params.coinCreator,
 		baseMint: params.baseMint,
-		quoteMint: params.quoteMint,
+		quoteMint: params.quoteMintInfo.address,
 		partner: params.partner,
 		platformConfig: params.platformConfig,
-		quoteTokenProgram: params.quoteTokenProgram,
+		quoteTokenProgram: params.quoteMintInfo.tokenProgram,
 		name: params.name,
 		symbol: params.symbol,
 		uri: params.uri,
@@ -69,8 +68,8 @@ export async function buildCreateAndBuyInstructions(
 		const buyResult = await buyExactIn({
 			user: params.user,
 			payer: params.payer,
-			baseMint: params.baseMint.address,
-			quoteMint: params.quoteMint,
+			baseMintInfo: launchMintInfo(params.baseMint.address),
+			quoteMintInfo: params.quoteMintInfo,
 			virtualQuoteReserves: params.initialVirtualQuoteReserves,
 			virtualBaseReserves: params.initialVirtualBaseReserves,
 			realBaseReserves: params.initialRealBaseReserves,
@@ -78,8 +77,6 @@ export async function buildCreateAndBuyInstructions(
 			feeBps: params.feeBps,
 			slippageBps: params.slippageBps,
 			partner: params.partner,
-			quoteFee: params.quoteFee,
-			quoteTokenProgram: params.quoteTokenProgram,
 			quoteAmountIn: params.buyQuoteAmount,
 		});
 

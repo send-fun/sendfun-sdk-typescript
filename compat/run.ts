@@ -2,12 +2,14 @@
  * Consumer compatibility harness for the published SDK.
  *
  * Packs the built SDK exactly as it is published, installs the tarball into
- * fresh temp projects for every supported @solana/kit version with npm and
- * pnpm, and in each project: audits the installed copies of kit and
+ * fresh temp projects for every supported @solana/kit version with npm, pnpm
+ * and Yarn PnP, and in each project: audits the installed copies of kit and
  * program-client-core, typechecks consumer code plus a must-fail canary with
  * several TypeScript versions and resolution modes, and runs ESM and CommonJS
  * consumers against a stub RPC, comparing their output with a reference
- * snapshot computed from the SDK source.
+ * snapshot computed from the SDK source. Yarn PnP projects skip the audit and
+ * the typecheck: they have no node_modules to walk, and TypeScript does not
+ * resolve through PnP without Yarn's patched compiler.
  *
  * Needs network (registry installs), so it stays out of `check` and `test`.
  *
@@ -21,7 +23,7 @@
 import { existsSync, realpathSync } from 'node:fs';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { availableParallelism, tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import * as kit from '@solana/kit';
@@ -33,9 +35,9 @@ import {
 	auditInstall,
 	createProject,
 	installProject,
+	installYarn,
 	PACKAGE_MANAGERS,
-	packageRootOf,
-	versionOfPackageAt,
+	yarnCommand,
 	type PackageManager,
 	type Project,
 } from './harness/project.js';
@@ -46,8 +48,8 @@ import {
 	writeTsconfigs,
 } from './harness/typecheck.js';
 import {
-	kitFreshnessProblems,
 	kitMatrix,
+	kitReleases,
 	TYPESCRIPT_VERSIONS,
 } from './harness/versions.js';
 
@@ -87,7 +89,7 @@ function parseOptions(): Options | null {
 	});
 	if (values.help) {
 		process.stdout.write(
-			'usage: tsx compat/run.ts [--kit <version>] [--pm npm|pnpm] [--ts <version>] [--tarball <path>] [--keep]\n',
+			`usage: tsx compat/run.ts [--kit <version>] [--pm ${PACKAGE_MANAGERS.join('|')}] [--ts <version>] [--tarball <path>] [--keep]\n`,
 		);
 		return null;
 	}
@@ -95,7 +97,9 @@ function parseOptions(): Options | null {
 	const managers = splitList(values.pm);
 	for (const manager of managers) {
 		if (!PACKAGE_MANAGERS.some((known) => known === manager)) {
-			throw new Error(`--pm must be npm or pnpm, got ${manager}`);
+			throw new Error(
+				`--pm must be one of ${PACKAGE_MANAGERS.join(', ')}, got ${manager}`,
+			);
 		}
 	}
 	const typescripts = splitList(values.ts);
@@ -172,40 +176,75 @@ async function runConsumer(
 	project: Project,
 	format: 'esm' | 'cjs',
 	reference: string,
+	sdkVersion: string,
 ): Promise<string[]> {
 	const entry = format === 'esm' ? 'entry-esm.ts' : 'entry-cjs.cts';
-	const result = await runCommand(
-		process.execPath,
-		['--disable-warning=ExperimentalWarning', entry],
-		{ cwd: project.directory, timeoutMs: 120_000 },
-	);
+	const nodeArgs = ['--disable-warning=ExperimentalWarning', entry];
+	// `yarn node` starts Node with the project's PnP resolver.
+	const { command, args } =
+		project.packageManager === 'yarn'
+			? yarnCommand(project, ['node', ...nodeArgs])
+			: { command: process.execPath, args: nodeArgs };
+	const result = await runCommand(command, args, {
+		cwd: project.directory,
+		timeoutMs: 120_000,
+	});
 	const lastLine = result.stdout.trim().split('\n').at(-1) ?? '';
 	if (result.code !== 0 || !lastLine.startsWith('{')) {
 		return [
 			`${format} consumer exited ${result.code}:\n${outputTail(result, 25)}`,
 		];
 	}
-	const report: { sdkEntry: string; kitEntry: string; snapshot: Json } =
-		JSON.parse(lastLine);
+	const report: {
+		sdkEntry: string;
+		sdkVersion: string;
+		kitEntry: string;
+		kitVersion: string;
+		snapshot: Json;
+	} = JSON.parse(lastLine);
 	const problems: string[] = [];
 	const expectedEntry = join(
 		'dist',
 		format === 'esm' ? 'index.mjs' : 'index.cjs',
 	);
-	const installedSdk = realpathSync(
-		join(project.directory, 'node_modules', '@send-fun', 'sdk'),
-	);
-	if (realpathSync(report.sdkEntry) !== join(installedSdk, expectedEntry)) {
+	if (project.packageManager === 'yarn') {
+		// PnP loads the SDK from a zip archive in the project's own cache,
+		// through a `.yarn/__virtual__` path that carries its peers.
+		const yarnFolder = `${join(realpathSync(project.directory), '.yarn')}${sep}`;
+		const installedEntry = join(
+			'node_modules',
+			'@send-fun',
+			'sdk',
+			expectedEntry,
+		);
+		if (
+			!report.sdkEntry.startsWith(yarnFolder) ||
+			!report.sdkEntry.endsWith(installedEntry)
+		) {
+			problems.push(
+				`${format} loaded the SDK from ${report.sdkEntry}, expected ${installedEntry} under ${yarnFolder}`,
+			);
+		}
+	} else {
+		const installedSdk = realpathSync(
+			join(project.directory, 'node_modules', '@send-fun', 'sdk'),
+		);
+		if (
+			realpathSync(report.sdkEntry) !== join(installedSdk, expectedEntry)
+		) {
+			problems.push(
+				`${format} loaded the SDK from ${report.sdkEntry}, expected the installed ${expectedEntry}`,
+			);
+		}
+	}
+	if (report.sdkVersion !== sdkVersion) {
 		problems.push(
-			`${format} loaded the SDK from ${report.sdkEntry}, expected the installed ${expectedEntry}`,
+			`${format} loaded @send-fun/sdk ${report.sdkVersion}, packed ${sdkVersion}`,
 		);
 	}
-	const loadedKit = versionOfPackageAt(
-		packageRootOf(report.kitEntry, '@solana/kit'),
-	);
-	if (loadedKit !== project.kit) {
+	if (report.kitVersion !== project.kit) {
 		problems.push(
-			`${format} loaded @solana/kit ${loadedKit}, expected ${project.kit}`,
+			`${format} loaded @solana/kit ${report.kitVersion}, expected ${project.kit}`,
 		);
 	}
 	if (JSON.stringify(report.snapshot) !== reference) {
@@ -279,7 +318,6 @@ async function main(options: Options, temporaryRoot: string): Promise<number> {
 	const manifest: { peerDependencies: Record<string, string | undefined> } =
 		JSON.parse(await readFile(join(sdkRoot, 'package.json'), 'utf8'));
 	const peerRange = manifest.peerDependencies['@solana/kit'] ?? '';
-	const kits = options.kits ?? kitMatrix(peerRange);
 	const globalProblems = new Map<string, string[]>();
 
 	if (
@@ -295,6 +333,8 @@ async function main(options: Options, temporaryRoot: string): Promise<number> {
 			'the consumer entries need Node >= 22.18 with type stripping enabled',
 		);
 	}
+	const kits =
+		options.kits ?? kitMatrix(peerRange, await kitReleases(temporaryRoot));
 
 	const [npmVersion, pnpmVersion] = await Promise.all(
 		(['npm', 'pnpm'] as const).map(async (tool) => {
@@ -311,15 +351,6 @@ async function main(options: Options, temporaryRoot: string): Promise<number> {
 		`typescript ${options.typescripts.join(' ')} x ${RESOLUTION_MODES.join(', ')}`,
 	);
 	log(`temp root ${temporaryRoot}`);
-
-	if (options.kits === null) {
-		globalProblems.set(
-			'kit freshness',
-			await kitFreshnessProblems(peerRange, temporaryRoot),
-		);
-	} else {
-		log('kit freshness: skipped (--kit given)');
-	}
 
 	const tarball =
 		options.tarball ??
@@ -348,6 +379,9 @@ async function main(options: Options, temporaryRoot: string): Promise<number> {
 		temporaryRoot,
 		options.typescripts,
 	);
+	if (options.packageManagers.includes('yarn')) {
+		globalProblems.set('yarn cli', await installYarn(temporaryRoot));
+	}
 	const reports = await mapConcurrent(
 		kits.flatMap((version) =>
 			options.packageManagers.map((packageManager) => ({
@@ -369,7 +403,10 @@ async function main(options: Options, temporaryRoot: string): Promise<number> {
 			]);
 			// A misaligned install still gets typechecked and run: the later
 			// stages show what the duplicate copies break for a consumer.
-			if (stages.get('install')?.length === 0) {
+			if (
+				stages.get('install')?.length === 0 &&
+				project.packageManager !== 'yarn'
+			) {
 				stages.set(
 					'copies',
 					auditInstall(project, sdkRoot, inspection.manifest.version),
@@ -393,10 +430,13 @@ async function main(options: Options, temporaryRoot: string): Promise<number> {
 
 	if (toolchain.problems.length === 0) {
 		const typecheckStart = performance.now();
-		await Promise.all(
-			installed.map((report) => writeTsconfigs(report.project)),
+		const typechecked = installed.filter(
+			(report) => report.project.packageManager !== 'yarn',
 		);
-		const jobs = installed.flatMap((report) =>
+		await Promise.all(
+			typechecked.map((report) => writeTsconfigs(report.project)),
+		);
+		const jobs = typechecked.flatMap((report) =>
 			options.typescripts.flatMap((typescript) =>
 				RESOLUTION_MODES.map((mode) => ({ report, typescript, mode })),
 			),
@@ -440,6 +480,7 @@ async function main(options: Options, temporaryRoot: string): Promise<number> {
 				job.report.project,
 				job.format,
 				reference,
+				inspection.manifest.version,
 			),
 		}));
 		for (const { job, problems } of results) {

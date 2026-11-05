@@ -397,10 +397,13 @@ export interface WithdrawFeesAccounts {
 	rewardMint: Address;
 	destinationTokenAccount: Address;
 	tokenProgram: Address;
+	launchpadRewardAccrual: Address;
+	dexRewardAccrual: Address;
 }
 
-/** Returns the accounts of `withdraw_fees` for one reward mint. Without `tokenProgram`, reads it
- *  from the mint account. Throws if that account does not exist. */
+/** Returns the accounts of `withdraw_fees` for one reward mint. Derives the launchpad and dex
+ *  `RewardAccrual` PDAs from the mint. Without `tokenProgram`, reads it from the mint account.
+ *  Throws if that account does not exist. */
 export async function buildWithdrawFeesAccounts(
 	rpc: Rpc<GetAccountInfoApi>,
 	params: {
@@ -420,23 +423,30 @@ export async function buildWithdrawFeesAccounts(
 				.send()
 		).value?.owner;
 
-	const [[rewardState], [vault], [destinationTokenAccount]] =
-		await Promise.all([
-			findRewardStatePda({
-				stakingConfig: stakingConfigAddr,
-				rewardMint: params.rewardMint,
-			}),
-			findAssociatedTokenPda(
-				stakingConfigAddr,
-				params.rewardMint,
-				tokenProgram,
-			),
-			findAssociatedTokenPda(
-				params.destination,
-				params.rewardMint,
-				tokenProgram,
-			),
-		]);
+	const [
+		[rewardState],
+		[vault],
+		[destinationTokenAccount],
+		[launchpadRewardAccrual],
+		[dexRewardAccrual],
+	] = await Promise.all([
+		findRewardStatePda({
+			stakingConfig: stakingConfigAddr,
+			rewardMint: params.rewardMint,
+		}),
+		findAssociatedTokenPda(
+			stakingConfigAddr,
+			params.rewardMint,
+			tokenProgram,
+		),
+		findAssociatedTokenPda(
+			params.destination,
+			params.rewardMint,
+			tokenProgram,
+		),
+		findLaunchpadRewardAccrualPda({ quoteMint: params.rewardMint }),
+		findDexRewardAccrualPda({ quoteMint: params.rewardMint }),
+	]);
 
 	if (tokenProgram === undefined) {
 		throw new Error(`Mint ${params.rewardMint} not found`);
@@ -448,6 +458,8 @@ export async function buildWithdrawFeesAccounts(
 		rewardMint: params.rewardMint,
 		destinationTokenAccount,
 		tokenProgram,
+		launchpadRewardAccrual,
+		dexRewardAccrual,
 	};
 }
 
@@ -493,7 +505,8 @@ export async function fetchSendMint(
 export interface PendingReward {
 	rewardMint: Address;
 	/** Amount the vault sends, in raw units of `rewardMint`. Equals `ClaimEvent.amount`. A mint with a
-	 *  transfer fee delivers less. Get the fee with `transferFee.fetchMintFees`. */
+	 *  transfer fee delivers less. `transferFee.feeAt` gives the fee from
+	 *  the `transferFee` of the mint's `MintInfo` (`utils.fetchMintInfo`). */
 	pending: bigint;
 }
 

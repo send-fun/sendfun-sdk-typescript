@@ -1,41 +1,46 @@
-import type { Address, Instruction, TransactionSigner } from '@solana/kit';
-import type { BuyQuote, MintFee, SellQuote } from '../math/amm.js';
+import type {
+	AccountMeta,
+	Address,
+	Instruction,
+	InstructionWithAccounts,
+	InstructionWithData,
+	ReadonlyUint8Array,
+	TransactionSigner,
+} from '@solana/kit';
+import type { BuyQuote, SellQuote } from '../math/amm.js';
 import * as amm from '../math/amm.js';
+import { appendHookAccounts } from '../transfer-hook/fetch.js';
+import { tradeLegsOf } from '../transfer-hook/legs.js';
+import type { HookLegs } from '../transfer-hook/resolver.js';
+import {
+	checkBaseMint,
+	hookStateOf,
+	tradeFees,
+	type MintInfo,
+} from '../utils/mint-info.js';
 import type { PartnerInput } from '../utils/partner.js';
 import { getBuyExactInInstructionAsync } from './generated/instructions/buyExactIn.js';
 import { getBuyExactOutInstructionAsync } from './generated/instructions/buyExactOut.js';
 import { getSellExactInInstructionAsync } from './generated/instructions/sellExactIn.js';
 import { getSellExactOutInstructionAsync } from './generated/instructions/sellExactOut.js';
+import { parseSendDexInstruction } from './generated/instructions/sendDex.instructions.js';
 
-export interface DexTradeParams {
-	user: TransactionSigner;
-	payer?: TransactionSigner;
-	baseMint: Address;
-	quoteMint: Address;
+export interface DexTradeParams extends DexInstructionParams {
 	baseReserves: bigint;
 	quoteReserves: bigint;
 	feeBps: number;
 	slippageBps: number;
-	partner: PartnerInput;
-	platformConfig: Address;
-	quoteTokenProgram: Address;
-	/** The quote mint's transfer fee for the epoch the trade lands in. A missing or old fee gives wrong slippage bounds. */
-	quoteFee?: MintFee;
-	baseFee?: MintFee;
-	/** {@inheritDoc DexInstructionParams.userQuoteAccount} */
-	userQuoteAccount?: Address;
-	/** {@inheritDoc DexInstructionParams.userBaseAccount} */
-	userBaseAccount?: Address;
 }
 
 export interface DexInstructionParams {
 	user: TransactionSigner;
 	payer?: TransactionSigner;
-	baseMint: Address;
-	quoteMint: Address;
+	/** From `utils.fetchMintInfo`. */
+	baseMintInfo: MintInfo;
+	/** From `utils.fetchMintInfo`. */
+	quoteMintInfo: MintInfo;
 	partner: PartnerInput;
 	platformConfig: Address;
-	quoteTokenProgram: Address;
 	/** Any quote-mint token account that `user` owns. Defaults to the user's ATA.
 	 *  The program creates a missing ATA, and `payer` pays the rent. */
 	userQuoteAccount?: Address;
@@ -53,8 +58,7 @@ export async function buyExactOut(
 		reserveBase: params.baseReserves,
 		baseAmountOut: params.baseAmountOut,
 		feeBps: params.feeBps,
-		quoteFee: params.quoteFee,
-		baseFee: params.baseFee,
+		...tradeFees(params),
 	});
 	// The program checks `maxAmountIn` against the gross the buyer sends, quote transfer fee included.
 	const maxQuoteIn = amm.calculateSlippageUp(
@@ -79,8 +83,7 @@ export async function buyExactIn(
 		reserveBase: params.baseReserves,
 		quoteAmountIn: params.quoteAmountIn,
 		feeBps: params.feeBps,
-		quoteFee: params.quoteFee,
-		baseFee: params.baseFee,
+		...tradeFees(params),
 	});
 	// The program checks `minAmountOut` against what the buyer receives, not the vault's debit.
 	const minBaseOut = amm.calculateSlippageDown(
@@ -105,8 +108,7 @@ export async function sellExactIn(
 		reserveBase: params.baseReserves,
 		baseAmountIn: params.baseAmountIn,
 		feeBps: params.feeBps,
-		quoteFee: params.quoteFee,
-		baseFee: params.baseFee,
+		...tradeFees(params),
 	});
 	// The program checks `minAmountOut` against what the seller receives, not the vault's debit.
 	const minQuoteOut = amm.calculateSlippageDown(
@@ -132,8 +134,7 @@ export async function sellExactOut(
 		reserveBase: params.baseReserves,
 		quoteAmountOut: params.quoteAmountOut,
 		feeBps: params.feeBps,
-		quoteFee: params.quoteFee,
-		baseFee: params.baseFee,
+		...tradeFees(params),
 	});
 	// The program checks `maxAmountIn` against the gross the seller sends, base transfer fee included.
 	const maxBaseIn = amm.calculateSlippageUp(
@@ -153,56 +154,117 @@ export async function sellExactOut(
 export async function buildBuyExactInInstruction(
 	params: DexInstructionParams & { amountIn: bigint; minAmountOut: bigint },
 ): Promise<Instruction> {
-	const shared = resolveSharedAccounts(params);
-	return getBuyExactInInstructionAsync({
-		...shared,
-		amountIn: params.amountIn,
-		minAmountOut: params.minAmountOut,
-	});
+	const shared = sharedAccounts(params);
+	return withHooks(
+		await getBuyExactInInstructionAsync({
+			...shared,
+			amountIn: params.amountIn,
+			minAmountOut: params.minAmountOut,
+		}),
+		params,
+	);
 }
 
 export async function buildBuyExactOutInstruction(
 	params: DexInstructionParams & { amountOut: bigint; maxAmountIn: bigint },
 ): Promise<Instruction> {
-	const shared = resolveSharedAccounts(params);
-	return getBuyExactOutInstructionAsync({
-		...shared,
-		amountOut: params.amountOut,
-		maxAmountIn: params.maxAmountIn,
-	});
+	const shared = sharedAccounts(params);
+	return withHooks(
+		await getBuyExactOutInstructionAsync({
+			...shared,
+			amountOut: params.amountOut,
+			maxAmountIn: params.maxAmountIn,
+		}),
+		params,
+	);
 }
 
 export async function buildSellExactInInstruction(
 	params: DexInstructionParams & { amountIn: bigint; minAmountOut: bigint },
 ): Promise<Instruction> {
-	const shared = resolveSharedAccounts(params);
-	return getSellExactInInstructionAsync({
-		...shared,
-		amountIn: params.amountIn,
-		minAmountOut: params.minAmountOut,
-	});
+	const shared = sharedAccounts(params);
+	return withHooks(
+		await getSellExactInInstructionAsync({
+			...shared,
+			amountIn: params.amountIn,
+			minAmountOut: params.minAmountOut,
+		}),
+		params,
+	);
 }
 
 export async function buildSellExactOutInstruction(
 	params: DexInstructionParams & { amountOut: bigint; maxAmountIn: bigint },
 ): Promise<Instruction> {
-	const shared = resolveSharedAccounts(params);
-	return getSellExactOutInstructionAsync({
-		...shared,
-		amountOut: params.amountOut,
-		maxAmountIn: params.maxAmountIn,
-	});
+	const shared = sharedAccounts(params);
+	return withHooks(
+		await getSellExactOutInstructionAsync({
+			...shared,
+			amountOut: params.amountOut,
+			maxAmountIn: params.maxAmountIn,
+		}),
+		params,
+	);
 }
 
-function resolveSharedAccounts(params: DexInstructionParams) {
+type BuiltTrade = Instruction &
+	InstructionWithAccounts<readonly AccountMeta[]> &
+	InstructionWithData<ReadonlyUint8Array>;
+
+async function withHooks(
+	instruction: BuiltTrade,
+	params: DexInstructionParams,
+): Promise<Instruction> {
+	return appendHookAccounts(
+		instruction,
+		tradeLegs(instruction),
+		hookStateOf([params.baseMintInfo, params.quoteMintInfo]),
+	);
+}
+
+// The two legs of a trade this module built, read by name with the generated
+// parser. The pool's writes all follow the transfers.
+function tradeLegs(instruction: BuiltTrade): HookLegs {
+	const parsed = parseSendDexInstruction(instruction);
+	switch (parsed?.instructionType) {
+		case 'buyExactIn':
+		case 'buyExactOut':
+		case 'sellExactIn':
+		case 'sellExactOut': {
+			const { accounts } = parsed;
+			return tradeLegsOf(
+				parsed.instructionType.startsWith('buy') ? 'buy' : 'sell',
+				{
+					user: accounts.user.address,
+					market: accounts.pool.address,
+					baseMint: accounts.baseMint.address,
+					quoteMint: accounts.quoteMint.address,
+					baseVault: accounts.baseVault.address,
+					quoteVault: accounts.quoteVault.address,
+					userBaseAccount: accounts.userBaseAccount.address,
+					userQuoteAccount: accounts.userQuoteAccount.address,
+				},
+				{ writesMarket: false },
+			);
+		}
+		default:
+			throw new RangeError(
+				`expected a dex trade, got ${parsed?.instructionType ?? 'none'}`,
+			);
+	}
+}
+
+function sharedAccounts(params: DexInstructionParams) {
+	const { baseMintInfo, quoteMintInfo } = params;
+	checkBaseMint('dex.trade', baseMintInfo);
 	return {
 		user: params.user,
 		payer: params.payer ?? params.user,
-		baseMint: params.baseMint,
-		quoteMint: params.quoteMint,
+		baseMint: baseMintInfo.address,
+		quoteMint: quoteMintInfo.address,
 		partner: params.partner,
 		platformConfig: params.platformConfig,
-		quoteTokenProgram: params.quoteTokenProgram,
+		quoteTokenProgram: quoteMintInfo.tokenProgram,
 		// When omitted, the generated client derives the ATA.
 		...(params.userQuoteAccount !== undefined && {
 			userQuoteAccount: params.userQuoteAccount,

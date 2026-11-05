@@ -1,13 +1,5 @@
 import { runCommand } from './process.js';
 
-// Bump on purpose; the full run fails once a newer release is two days old.
-// Floors come from the SDK's peer range, not this list.
-export const NEWEST_KIT_BY_MAJOR: Readonly<Partial<Record<string, string>>> = {
-	'6': '6.10.0',
-	'7': '7.1.1',
-	'8': '8.3.0',
-};
-
 /**
  * Compilers consumers realistically run: the last 5.x, the 6.x the SDK is
  * built with, and the native 7.x that is npm's `latest`.
@@ -17,6 +9,9 @@ export const TYPESCRIPT_VERSIONS: readonly string[] = [
 	'6.0.3',
 	'7.0.2',
 ];
+
+/** The Yarn Berry release of the Plug'n'Play projects. */
+export const YARN_VERSION = '4.18.1';
 
 /** Node 24 LTS types; consumer entries run on Node's type stripping (22.18+). */
 export const TYPES_NODE_VERSION = '24.13.4';
@@ -65,63 +60,56 @@ export function kitFloors(peerRange: string): string[] {
 	});
 }
 
-/** Every floor plus the pinned newest release of each floor's major. */
-export function kitMatrix(peerRange: string): string[] {
+/**
+ * Every floor, plus the newest of `releases` in each floor's caret range: the
+ * kit a consumer on that major installs today.
+ */
+export function kitMatrix(
+	peerRange: string,
+	releases: readonly string[],
+): string[] {
 	const versions = new Set<string>();
 	for (const floor of kitFloors(peerRange)) {
-		const newest = NEWEST_KIT_BY_MAJOR[majorOf(floor)];
-		if (newest === undefined) {
-			throw new Error(
-				`peer range supports kit ${majorOf(floor)}.x but NEWEST_KIT_BY_MAJOR has no entry for it`,
-			);
-		}
-		versions.add(floor).add(newest);
+		versions.add(floor);
+		const newest = releases
+			.filter(
+				(version) =>
+					majorOf(version) === majorOf(floor) &&
+					compareVersions(version, floor) >= 0,
+			)
+			.toSorted(compareVersions)
+			.at(-1);
+		if (newest !== undefined) versions.add(newest);
 	}
 	return [...versions].toSorted(compareVersions);
 }
 
-// Matches `minimumReleaseAge`: younger releases cannot install yet, so they must not fail CI.
+// The consumer projects are outside the workspace, so its `minimumReleaseAge`
+// does not reach their installs. This window is their release cooldown.
 const KIT_RELEASE_AGE_MS = 2 * 24 * 60 * 60 * 1_000;
 
-// npm CLI, so the registry is the same one installs use.
-export async function kitFreshnessProblems(
-	peerRange: string,
-	cwd: string,
-): Promise<string[]> {
+/**
+ * The stable @solana/kit releases older than `KIT_RELEASE_AGE_MS`. The npm CLI
+ * reads the same registry as the installs.
+ */
+export async function kitReleases(cwd: string): Promise<string[]> {
 	const result = await runCommand(
 		'npm',
 		['view', '@solana/kit', 'time', '--json'],
 		{ cwd, timeoutMs: 60_000 },
 	);
 	if (result.code !== 0) {
-		return [`npm view @solana/kit failed:\n${result.stderr.trim()}`];
+		throw new Error(
+			`npm view @solana/kit failed:\n${result.stderr.trim()}`,
+		);
 	}
 	// Also holds `created` and `modified`, which are not versions.
 	const publishedAt: Record<string, string> = JSON.parse(result.stdout);
 	const cutoff = Date.now() - KIT_RELEASE_AGE_MS;
-	const published = Object.entries(publishedAt)
+	return Object.entries(publishedAt)
 		.filter(
 			([version, time]) =>
 				STABLE_VERSION.test(version) && Date.parse(time) <= cutoff,
 		)
 		.map(([version]) => version);
-	const problems: string[] = [];
-	for (const floor of kitFloors(peerRange)) {
-		const major = majorOf(floor);
-		const newest = published
-			.filter((version) => majorOf(version) === major)
-			.toSorted(compareVersions)
-			.at(-1);
-		const pinned = NEWEST_KIT_BY_MAJOR[major];
-		// Newer, not different: a pin younger than the age window is ahead of `newest`.
-		if (
-			newest !== undefined &&
-			(pinned === undefined || compareVersions(newest, pinned) > 0)
-		) {
-			problems.push(
-				`@solana/kit ${newest} is the newest ${major}.x on the registry but NEWEST_KIT_BY_MAJOR pins ${pinned ?? 'nothing'}; bump it in compat/harness/versions.ts`,
-			);
-		}
-	}
-	return problems;
 }

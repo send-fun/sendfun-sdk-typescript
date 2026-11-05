@@ -11,6 +11,7 @@ import {
 } from '@solana/kit';
 import {
 	buildSettleInstructions,
+	buildWithdrawFeesAccounts,
 	fetchMissingUserRewardDebts,
 	fetchPendingRewards,
 } from '../src/nexus/staking.js';
@@ -167,6 +168,83 @@ describe('buildSettleInstructions', () => {
 		);
 		assert.ok(userAccount);
 		assert.ok(!('signer' in userAccount));
+	});
+});
+
+describe('buildWithdrawFeesAccounts', () => {
+	const TOKEN_PROGRAM: Address = address(
+		'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+	);
+	const TOKEN_2022_PROGRAM: Address = address(
+		'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb',
+	);
+	// Any RPC call fails the test.
+	const noRpc = createSolanaRpcFromTransport(() =>
+		Promise.reject(new Error('unexpected RPC call')),
+	);
+
+	it('derives every account of one reward mint', async () => {
+		const accounts = await buildWithdrawFeesAccounts(noRpc, {
+			rewardMint: USDC,
+			destination: MOCK_USER,
+			tokenProgram: TOKEN_PROGRAM,
+		});
+		assert.deepEqual(accounts, {
+			rewardState: address(
+				'51QfCyPnx5m7DzDVqVwReNG134mvn2RFacK9JXPJeLyW',
+			),
+			vault: MOCK_VAULT,
+			rewardMint: USDC,
+			destinationTokenAccount: address(
+				'CTM9xaqDxrLX753nEWmKsJCRRcAU9GiahV8vRj6LPpjW',
+			),
+			tokenProgram: TOKEN_PROGRAM,
+			launchpadRewardAccrual: address(
+				'8yTsmaf44cZm3WwAYFRRhsfpy2tufUmvHkdM8wWgjMM7',
+			),
+			dexRewardAccrual: address(
+				'63NSsccY4RzZULpqLE6cxg98mVxyGoF29yJQuLx3bTG7',
+			),
+		});
+	});
+
+	// `withdraw_fees` refuses accruals off `["reward_accrual", reward_mint]`.
+	it('derives the accruals from the reward mint alone', async () => {
+		const accounts = await buildWithdrawFeesAccounts(noRpc, {
+			rewardMint: USDC,
+			destination: MOCK_PAYER.address,
+			tokenProgram: TOKEN_2022_PROGRAM,
+		});
+		const [launchpadAccrual] = await findLaunchpadRewardAccrualPda({
+			quoteMint: USDC,
+		});
+		const [dexAccrual] = await findDexRewardAccrualPda({ quoteMint: USDC });
+		assert.equal(
+			accounts.launchpadRewardAccrual,
+			address('8yTsmaf44cZm3WwAYFRRhsfpy2tufUmvHkdM8wWgjMM7'),
+		);
+		assert.equal(
+			accounts.dexRewardAccrual,
+			address('63NSsccY4RzZULpqLE6cxg98mVxyGoF29yJQuLx3bTG7'),
+		);
+		assert.equal(accounts.launchpadRewardAccrual, launchpadAccrual);
+		assert.equal(accounts.dexRewardAccrual, dexAccrual);
+	});
+
+	it('derives a different pair of accruals per reward mint', async () => {
+		const accounts = await buildWithdrawFeesAccounts(noRpc, {
+			rewardMint: WSOL,
+			destination: MOCK_USER,
+			tokenProgram: TOKEN_PROGRAM,
+		});
+		assert.equal(
+			accounts.launchpadRewardAccrual,
+			address('91AVurtPdUC2yG3joLoujzC216KAfH5HEKnZEELFMmVH'),
+		);
+		assert.equal(
+			accounts.dexRewardAccrual,
+			address('3AvcBtMajsyeNufVwkxV7UNXWo6G1qkJmCpiXx1HcFg8'),
+		);
 	});
 });
 

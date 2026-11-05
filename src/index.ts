@@ -5,4 +5,5 @@ export * as math from './math/index.js';
 export * as nexus from './nexus/index.js';
 export * as platform from './platform.js';
 export * as transferFee from './transfer-fee.js';
+export * as transferHook from './transfer-hook/index.js';
 export * as utils from './utils/index.js';

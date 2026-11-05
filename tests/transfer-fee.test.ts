@@ -59,9 +59,24 @@ describe('feeOn', () => {
 	});
 
 	it('is the identity when the mint carries no config', () => {
-		assert.equal(feeOn(1_000_000n, undefined), 0n);
-		assert.equal(amountAfterFee(1_000_000n, undefined), 1_000_000n);
-		assert.equal(grossUp(1_000_000n, undefined), 1_000_000n);
+		for (const fee of [undefined, null]) {
+			assert.equal(feeOn(1_000_000n, fee), 0n);
+			assert.equal(amountAfterFee(1_000_000n, fee), 1_000_000n);
+			assert.equal(grossUp(1_000_000n, fee), 1_000_000n);
+		}
+	});
+
+	it('quotes a null fee as no fee', () => {
+		const params = {
+			reserveQuote: RQ,
+			reserveBase: RB,
+			quoteAmountIn: 1_000_000_000n,
+			feeBps: FEE_BPS,
+		};
+		assert.deepEqual(
+			buyExactIn({ ...params, quoteFee: null, baseFee: null }),
+			buyExactIn(params),
+		);
 	});
 
 	it('rejects an out-of-range rate', () => {
@@ -310,6 +325,25 @@ describe('buyExactOut with transfer fees', () => {
 		assert.equal(quote.quoteAmount, 30_333_365n);
 		assert.equal(quote.fee, 303_334n);
 		assert.equal(quote.baseToUser, 1_000_000_000_000n);
+	});
+
+	// The cap and one unit less net the same amount.
+	it('over the cap, sends the gross of what the cap nets', () => {
+		const quote = buyExactOut({
+			reserveQuote: RQ,
+			reserveBase: RB,
+			baseAmountOut: 20_000_000_000_000n,
+			feeBps: FEE_BPS,
+			baseFee: BASE_100_BPS,
+			baseReserveCap: 10_000_000_000_001n,
+		});
+		assert.equal(quote.baseAmount, 10_000_000_000_000n);
+		assert.equal(quote.quoteAmount, 306_091_217n);
+		assert.equal(quote.fee, 3_060_913n);
+		assert.equal(quote.baseTransferFee, 100_000_000_000n);
+		assert.equal(quote.quoteTransferFee, 0n);
+		assert.equal(quote.baseToUser, 9_900_000_000_000n);
+		assert.equal(quote.quoteFromUser, 306_091_217n);
 	});
 
 	it('nets the capped fill down through the base mint', () => {

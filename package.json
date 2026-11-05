@@ -1,6 +1,6 @@
 {
 	"name": "@send-fun/sdk",
-	"version": "2.0.0",
+	"version": "3.0.0",
 	"description": "Kit-native TypeScript SDK for send.fun",
 	"keywords": [
 		"dex",
@@ -78,5 +78,5 @@
 	"engines": {
 		"node": ">=20.18.0"
 	},
-	"packageManager": "pnpm@11.5.0"
+	"packageManager": "pnpm@12.14.0"
 }

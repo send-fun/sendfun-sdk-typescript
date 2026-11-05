@@ -61,6 +61,7 @@ export type RewardAccrual = {
 	quoteMint: Address;
 	accPerToken: bigint;
 	totalDeposited: bigint;
+	accRemainder: bigint;
 	reserved: ReadonlyUint8Array;
 };
 
@@ -70,6 +71,7 @@ export type RewardAccrualArgs = {
 	quoteMint: Address;
 	accPerToken: number | bigint;
 	totalDeposited: number | bigint;
+	accRemainder: number | bigint;
 	reserved: ReadonlyUint8Array;
 };
 
@@ -83,7 +85,8 @@ export function getRewardAccrualEncoder(): FixedSizeEncoder<RewardAccrualArgs> {
 			['quoteMint', getAddressEncoder()],
 			['accPerToken', getU128Encoder()],
 			['totalDeposited', getU64Encoder()],
-			['reserved', fixEncoderSize(getBytesEncoder(), 64)],
+			['accRemainder', getU64Encoder()],
+			['reserved', fixEncoderSize(getBytesEncoder(), 56)],
 		]),
 		(value) => ({ ...value, discriminator: REWARD_ACCRUAL_DISCRIMINATOR }),
 	);
@@ -98,7 +101,8 @@ export function getRewardAccrualDecoder(): FixedSizeDecoder<RewardAccrual> {
 		['quoteMint', getAddressDecoder()],
 		['accPerToken', getU128Decoder()],
 		['totalDeposited', getU64Decoder()],
-		['reserved', fixDecoderSize(getBytesDecoder(), 64)],
+		['accRemainder', getU64Decoder()],
+		['reserved', fixDecoderSize(getBytesDecoder(), 56)],
 	]);
 }
 

@@ -5,7 +5,8 @@ trustPolicy: no-downgrade
 blockExoticSubdeps: true
 strictDepBuilds: true
 optimisticRepeatInstall: true
-verifyDepsBeforeRun: install
+verifyDepsBeforeRun: error
+skills: { dirs: [] }
 
 # Build scripts this package's dependency tree needs.
 allowBuilds:

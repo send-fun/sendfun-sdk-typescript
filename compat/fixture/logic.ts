@@ -8,11 +8,13 @@
  * so the snapshot is identical on every kit version and every run.
  */
 import assert from 'node:assert/strict';
+import { existsSync, readFileSync } from 'node:fs';
 import {
 	createServer,
 	type IncomingMessage,
 	type ServerResponse,
 } from 'node:http';
+import { dirname, join } from 'node:path';
 import type * as SendFunSdk from '@send-fun/sdk';
 import type * as SolanaKit from '@solana/kit';
 
@@ -29,6 +31,252 @@ const BUY_MIN_AMOUNT_OUT = 5n;
 const STAKE_AMOUNT = 7_000_000n;
 
 const seedBytes = (fill: number): Uint8Array => new Uint8Array(32).fill(fill);
+
+/** The `Execute` discriminator, the TLV type of a hook list's account entry. */
+const EXECUTE_DISCRIMINATOR = [105, 37, 101, 197, 75, 251, 102, 26];
+
+/** The first seed of a mint's validation account, under its hook program. */
+const VALIDATION_SEED = 'extra-account-metas';
+
+// A meta: a u8 discriminator, a 32-byte address config, then the signer and
+// writable bools.
+const META_FIXED = 0;
+const META_HOOK_PDA = 1;
+const META_PUBKEY_DATA = 2;
+const SEED_ACCOUNT_KEY = 3;
+const PUBKEY_ACCOUNT_DATA = 2;
+const CONFIG_LENGTH = 32;
+// `Execute` account 0 is the source; its owner sits at byte 32.
+const SOURCE_INDEX = 0;
+const OWNER_OFFSET = 32;
+
+// Where the canary's `SharedArrayBuffer` view starts.
+const SHARED_VIEW_OFFSET = 3;
+
+// A Token-2022 mint: `is_initialized`, then `AccountType::Mint` after the
+// 82-byte base and its padding, then each extension's type and length. The
+// `TransferHook` extension is type 14, 64 bytes: its authority, then its
+// program.
+const MINT_BASE_LENGTH = 82;
+const MINT_IS_INITIALIZED = 45;
+const MINT_ACCOUNT_TYPE = 165;
+const ACCOUNT_TYPE_MINT = 1;
+const TRANSFER_HOOK_HEADER = [14, 0, 64, 0];
+const MINT_HOOK_PROGRAM_OFFSET = 166 + 4 + 32;
+
+/**
+ * The version in the nearest `package.json` named `name` above `entry`. Under
+ * Yarn PnP `entry` sits in a zip archive, which `yarn node` lets `node:fs`
+ * read.
+ */
+export function packageVersion(entry: string, name: string): string {
+	for (let directory = dirname(entry); ; directory = dirname(directory)) {
+		const manifestPath = join(directory, 'package.json');
+		if (existsSync(manifestPath)) {
+			const manifest: { name?: string; version?: string } = JSON.parse(
+				readFileSync(manifestPath, 'utf8'),
+			);
+			if (manifest.name === name) return manifest.version ?? 'unknown';
+		}
+		if (dirname(directory) === directory) {
+			throw new Error(`no ${name} package above ${entry}`);
+		}
+	}
+}
+
+function u32LittleEndian(value: number): number[] {
+	return [
+		value & 0xff,
+		(value >> 8) & 0xff,
+		(value >> 16) & 0xff,
+		value >>> 24,
+	];
+}
+
+function hookMeta(
+	discriminator: number,
+	config: readonly number[],
+	writable: boolean,
+): number[] {
+	const padded = [
+		...config,
+		...Array.from({ length: CONFIG_LENGTH - config.length }, () => 0),
+	];
+	return [discriminator, ...padded, 0, writable ? 1 : 0];
+}
+
+/** A Token-2022 mint whose one extension is a `TransferHook` for `program`. */
+function hookedMintData(program: Uint8Array): Uint8Array {
+	const data = new Uint8Array(MINT_HOOK_PROGRAM_OFFSET + program.length);
+	data[MINT_IS_INITIALIZED] = 1;
+	data[MINT_ACCOUNT_TYPE] = ACCOUNT_TYPE_MINT;
+	data.set(TRANSFER_HOOK_HEADER, MINT_ACCOUNT_TYPE + 1);
+	data.set(program, MINT_HOOK_PROGRAM_OFFSET);
+	return data;
+}
+
+/**
+ * An initialized mint with no extensions, as SPL Token and Token-2022 both
+ * store one.
+ */
+function plainMintData(): Uint8Array {
+	const data = new Uint8Array(MINT_BASE_LENGTH);
+	data[MINT_IS_INITIALIZED] = 1;
+	return data;
+}
+
+/**
+ * Builds a hooked buy from a hook list in a `SharedArrayBuffer` view, as a
+ * consumer can hand it over. A plain array and a read through the consumer's
+ * own kit RPC must give the same buy.
+ */
+async function transferHookCanary(sdk: Sdk, kit: Kit): Promise<Json> {
+	const { constants, launchpad, utils } = sdk;
+	const address = (fill: number): SolanaKit.Address =>
+		kit.getAddressDecoder().decode(seedBytes(fill));
+	const hookProgram = address(20);
+	const userQuoteAccount = address(21);
+	const quoteMint = address(22);
+	const baseMint = address(23);
+	const user = kit.createNoopSigner(address(24));
+	const platformConfig = address(25);
+	const fixed = address(26);
+	const metas = [
+		hookMeta(META_FIXED, [...kit.getAddressEncoder().encode(fixed)], false),
+		hookMeta(META_HOOK_PDA, [SEED_ACCOUNT_KEY, SOURCE_INDEX], true),
+		hookMeta(
+			META_PUBKEY_DATA,
+			[PUBKEY_ACCOUNT_DATA, SOURCE_INDEX, OWNER_OFFSET],
+			false,
+		),
+	];
+	const body = [...u32LittleEndian(metas.length), ...metas.flat()];
+	const list = [
+		...EXECUTE_DISCRIMINATOR,
+		...u32LittleEndian(body.length),
+		...body,
+	];
+	const shared = new Uint8Array(
+		new SharedArrayBuffer(SHARED_VIEW_OFFSET + list.length),
+		SHARED_VIEW_OFFSET,
+	);
+	shared.set(list);
+
+	const [validation] = await kit.getProgramDerivedAddress({
+		programAddress: hookProgram,
+		seeds: [VALIDATION_SEED, kit.getAddressEncoder().encode(quoteMint)],
+	});
+	const baseAccount = {
+		owner: constants.TOKEN_2022_PROGRAM_ADDRESS,
+		data: plainMintData(),
+	};
+	const quoteAccount = {
+		owner: constants.TOKEN_2022_PROGRAM_ADDRESS,
+		data: hookedMintData(seedBytes(20)),
+	};
+	const [sourcePda] = await kit.getProgramDerivedAddress({
+		programAddress: hookProgram,
+		seeds: [kit.getAddressEncoder().encode(userQuoteAccount)],
+	});
+	// The quote leg's source is the user's quote account. The user signs it.
+	const expected: SolanaKit.AccountMeta[] = [
+		{ address: fixed, role: kit.AccountRole.READONLY },
+		{ address: sourcePda, role: kit.AccountRole.WRITABLE },
+		{ address: user.address, role: kit.AccountRole.READONLY },
+		{ address: hookProgram, role: kit.AccountRole.READONLY },
+		{ address: validation, role: kit.AccountRole.READONLY },
+	];
+	const plain = {
+		tokenProgram: constants.TOKEN_2022_PROGRAM_ADDRESS,
+		decimals: 0,
+		transferFee: null,
+	};
+	const baseMintInfo: SendFunSdk.utils.MintInfo = {
+		address: baseMint,
+		...plain,
+		hookProgram: null,
+		hook: null,
+	};
+	const quoteInfoOver = (
+		data: Uint8Array | null,
+	): SendFunSdk.utils.MintInfo => ({
+		address: quoteMint,
+		...plain,
+		hookProgram: data === null ? null : hookProgram,
+		hook:
+			data === null
+				? null
+				: {
+						accounts: new Map<
+							SolanaKit.Address,
+							SendFunSdk.transferHook.AccountView | null
+						>([
+							[quoteMint, quoteAccount],
+							[validation, { owner: hookProgram, data }],
+						]),
+					},
+	});
+	const buy = (quoteMintInfo: SendFunSdk.utils.MintInfo) =>
+		launchpad.trade.buildBuyExactInInstruction({
+			user,
+			baseMintInfo,
+			quoteMintInfo,
+			partner: constants.DEFAULT_PARTNER,
+			platformConfig,
+			userQuoteAccount,
+			amountIn: BUY_AMOUNT_IN,
+			minAmountOut: BUY_MIN_AMOUNT_OUT,
+		});
+	const hookFree = await buy(quoteInfoOver(null));
+	const built = await buy(quoteInfoOver(shared));
+	assert.deepStrictEqual(built.accounts, [
+		...(hookFree.accounts ?? []),
+		...expected,
+	]);
+	assert.deepStrictEqual(
+		await buy(quoteInfoOver(new Uint8Array(list))),
+		built,
+	);
+
+	const stub = await startStubRpc(
+		new Map<string, StoredAccount>([
+			[baseMint, baseAccount],
+			[quoteMint, quoteAccount],
+			[validation, { owner: hookProgram, data: shared }],
+			[
+				'SysvarC1ock11111111111111111111111111111111',
+				{
+					owner: 'Sysvar1111111111111111111111111111111111111',
+					data: new Uint8Array(40),
+				},
+			],
+		]),
+	);
+	let read: SendFunSdk.utils.MintInfoResult<'baseMint' | 'quoteMint'>;
+	try {
+		read = await utils.fetchMintInfo(kit.createSolanaRpc(stub.url), {
+			baseMint,
+			quoteMint,
+		});
+	} finally {
+		stub.close();
+	}
+	assert.deepStrictEqual(read.baseMintInfo, baseMintInfo);
+	assert.equal(read.quoteMintInfo.hookProgram, hookProgram);
+	assert.deepStrictEqual(
+		{ ...read.quoteMintInfo, hookProgram: null, hook: null },
+		quoteInfoOver(null),
+	);
+	const hook = [...(read.quoteMintInfo.hook?.accounts.keys() ?? [])];
+	assert.deepStrictEqual(hook, [quoteMint, validation]);
+	assert.deepStrictEqual(await buy(read.quoteMintInfo), built);
+
+	return {
+		validation,
+		accounts: expected.map((meta) => [meta.address, meta.role]),
+		hook,
+	};
+}
 
 const toHex = (bytes: Uint8Array): string => Buffer.from(bytes).toString('hex');
 
@@ -263,6 +511,8 @@ export async function runCompat(
 		stakingConfigBytes.length,
 		nexus.accounts.getStakingConfigSize(),
 	);
+
+	const transferHook = await transferHookCanary(sdk, kit);
 
 	const stub = await startStubRpc(
 		new Map<string, StoredAccount>([
@@ -557,6 +807,7 @@ export async function runCompat(
 				programClientCoreError,
 			},
 			signedWireTransaction: kit.getBase64EncodedWireTransaction(signed),
+			transferHook,
 			plugin: {
 				bondingCurve: toJson(pluginBondingCurve),
 				missing: toJson(pluginMissing),

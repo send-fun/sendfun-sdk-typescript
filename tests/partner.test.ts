@@ -6,15 +6,12 @@ import {
 	createNoopSigner,
 	type Instruction,
 } from '@solana/kit';
-import {
-	DEFAULT_PARTNER,
-	TOKEN_PROGRAM_ADDRESS,
-	WSOL_MINT,
-} from '../src/constants.js';
+import { DEFAULT_PARTNER, WSOL_MINT_INFO } from '../src/constants.js';
 import * as dex from '../src/dex/trade.js';
 import { buildCreateTokenInstruction } from '../src/launchpad/create.js';
 import * as launchpad from '../src/launchpad/trade.js';
 import type { PartnerInput } from '../src/utils/partner.js';
+import { plainMintInfo } from './support/mint-infos.js';
 
 const USER = createNoopSigner(
 	address('BA529ggBvon9p6dAHc53uRQiPQgWQaSoAAdJHFGrSEND'),
@@ -26,10 +23,9 @@ const CREATE_PARTNER_INDEX = 12;
 
 const TRADE = {
 	user: USER,
-	baseMint: BASE_MINT,
-	quoteMint: WSOL_MINT,
+	baseMintInfo: plainMintInfo(BASE_MINT),
+	quoteMintInfo: WSOL_MINT_INFO,
 	platformConfig: PLATFORM_CONFIG,
-	quoteTokenProgram: TOKEN_PROGRAM_ADDRESS,
 } as const;
 const EXACT_IN = { amountIn: 1_000n, minAmountOut: 900n } as const;
 const EXACT_OUT = { amountOut: 1_000n, maxAmountIn: 1_100n } as const;
@@ -119,13 +115,12 @@ const BUILDERS: readonly {
 				user: USER,
 				coinCreator: USER.address,
 				baseMint: createNoopSigner(BASE_MINT),
-				quoteMint: WSOL_MINT,
+				quoteMintInfo: WSOL_MINT_INFO,
 				name: 'Partner',
 				symbol: 'PTNR',
 				uri: 'https://send.fun/partner.json',
 				partner,
 				platformConfig: PLATFORM_CONFIG,
-				quoteTokenProgram: TOKEN_PROGRAM_ADDRESS,
 				creatorFeeMode: 0,
 				creatorFeeBps: 0,
 				dexCreatorFeeBps: 10,

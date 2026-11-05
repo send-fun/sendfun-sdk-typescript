@@ -6,11 +6,15 @@
 import * as sdk from '@send-fun/sdk';
 import * as kit from '@solana/kit';
 import { fileURLToPath } from 'node:url';
-import { runCompat } from './logic.ts';
+import { packageVersion, runCompat } from './logic.ts';
 
+const sdkEntry = fileURLToPath(import.meta.resolve('@send-fun/sdk'));
+const kitEntry = fileURLToPath(import.meta.resolve('@solana/kit'));
 const report = {
-	sdkEntry: fileURLToPath(import.meta.resolve('@send-fun/sdk')),
-	kitEntry: fileURLToPath(import.meta.resolve('@solana/kit')),
+	sdkEntry,
+	sdkVersion: packageVersion(sdkEntry, '@send-fun/sdk'),
+	kitEntry,
+	kitVersion: packageVersion(kitEntry, '@solana/kit'),
 	snapshot: await runCompat(sdk, kit),
 };
 process.stdout.write(`${JSON.stringify(report)}\n`);

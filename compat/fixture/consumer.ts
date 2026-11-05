@@ -5,7 +5,7 @@
  * cascading from the resulting error type, which is what canary.ts is for.
  * The harness compiles a `.cts` copy too, against the CommonJS declarations.
  */
-import { constants, dex, launchpad, nexus } from '@send-fun/sdk';
+import { constants, dex, launchpad, nexus, utils } from '@send-fun/sdk';
 import {
 	address,
 	createClient,
@@ -19,6 +19,7 @@ import {
 	type GetMultipleAccountsApi,
 	type Instruction,
 	type MaybeAccount,
+	type Rpc,
 	type TransactionSigner,
 } from '@solana/kit';
 
@@ -122,4 +123,36 @@ export async function usage(where: Address): Promise<bigint> {
 		BigInt(staked.kind.length) +
 		BigInt(planned.programAddress.length)
 	);
+}
+
+/** The documented mint info flow, under the strict flags. */
+export async function mintInfoTrade(
+	rpc: Rpc<GetMultipleAccountsApi>,
+	baseMint: Address,
+	quoteMint: Address,
+): Promise<Instruction[]> {
+	const { baseMintInfo, quoteMintInfo } = await utils.fetchMintInfo(rpc, {
+		baseMint,
+		quoteMint,
+	});
+	const { instruction } = await launchpad.trade.buyExactIn({
+		user,
+		baseMintInfo,
+		quoteMintInfo,
+		virtualBaseReserves: 1n,
+		virtualQuoteReserves: 1n,
+		realBaseReserves: 1n,
+		partner: constants.DEFAULT_PARTNER,
+		platformConfig: baseMint,
+		feeBps: 100,
+		slippageBps: 100,
+		quoteAmountIn: 1n,
+	});
+	const { mintInfo } = await utils.fetchMintInfo(rpc, { mint: quoteMint });
+	const migrate = await launchpad.migrate.buildMigrateInstruction({
+		caller: user,
+		baseMintInfo,
+		quoteMintInfo: mintInfo,
+	});
+	return [instruction, migrate];
 }

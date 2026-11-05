@@ -71,14 +71,18 @@ export async function installToolchain(
 }
 
 /**
- * Strict consumer configs with library checking on. `DOM` is in both: kit's
- * declarations name WebCrypto and EventTarget types (`CryptoKeyPair`,
- * `AddEventListenerOptions`) that only the DOM lib declares, so kit itself
- * does not compile under `skipLibCheck: false` without it.
+ * Strict consumer configs with `skipLibCheck` off. They also set
+ * `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess`, which some
+ * consumers use. `DOM` is in both. Kit's declarations name WebCrypto and
+ * EventTarget types (`CryptoKeyPair`, `AddEventListenerOptions`) that only the
+ * DOM lib declares. Without it, kit does not compile under
+ * `skipLibCheck: false`.
  */
 export async function writeTsconfigs(project: Project): Promise<void> {
 	const common = {
 		strict: true,
+		exactOptionalPropertyTypes: true,
+		noUncheckedIndexedAccess: true,
 		noEmit: true,
 		skipLibCheck: false,
 		allowImportingTsExtensions: true,

@@ -29,6 +29,13 @@ later on React Native.
 - To create a token, get your platform key with
   `platform.findPlatformAddress(slug)`.
 - A partner other than `constants.DEFAULT_PARTNER` must sign.
+- Each trade and migrate builder takes a `MintInfo` for the base mint and a
+  `MintInfo` for the quote mint. Read both in one call:
+  `utils.fetchMintInfo(rpc, { baseMint, quoteMint })`. A create builder takes
+  only `quoteMintInfo`. Refresh a `MintInfo` on a timer, like any account. A
+  builder quotes each transfer fee at the epoch of the read. Read the mint
+  again when the epoch changes. For WSOL and USDC, you can also use
+  `constants.WSOL_MINT_INFO` and `constants.USDC_MINT_INFO`.
 - The `generated` modules come from the program IDLs. Do not edit them.
 
 ## Documentation
